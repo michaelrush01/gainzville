@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export const metadata = { title: "About · Gainzeville" };
+export const metadata = { title: "About · Gainzville" };
 
 export default function About() {
   return (
@@ -9,7 +9,7 @@ export default function About() {
         ‹
       </Link>
       <p className="mt-8 font-mono text-sm uppercase tracking-widest text-accent">About</p>
-      <h1 className="mt-2 font-display text-4xl font-bold text-heading">Why Gainzeville exists</h1>
+      <h1 className="mt-2 font-display text-4xl font-bold text-heading">Why Gainzville exists</h1>
 
       <div className="glass mt-8 space-y-4 rounded-3xl p-6 font-body leading-relaxed text-text">
         <p>

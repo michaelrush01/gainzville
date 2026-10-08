@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Gainzeville design tokens. Dark theme only for v1. */
+/* Gainzville design tokens. Dark theme only for v1. */
 :root {
   --ground: #120e1f;
   --card: #1d1730;

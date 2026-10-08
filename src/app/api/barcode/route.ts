@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   const fields = "product_name,brands,nutriments,serving_size,image_front_small_url";
   const res = await fetch(
     `https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=${fields}`,
-    { headers: { "User-Agent": "Gainzeville/0.1 (student project)" } },
+    { headers: { "User-Agent": "Gainzville/0.1 (student project)" } },
   );
   if (!res.ok) return Response.json({ error: "Food database is not responding. Try again." }, { status: 502 });
 

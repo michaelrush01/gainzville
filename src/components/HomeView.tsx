@@ -16,7 +16,7 @@ export default function HomeView() {
     <main className="relative flex h-dvh flex-col">
       <header className="absolute left-5 top-5 z-10">
         <h1 className="glitch font-display text-3xl font-bold text-text">
-          Gainz<span className="text-accent">eville</span>
+          Gainz<span className="text-accent">ville</span>
         </h1>
       </header>
 
@@ -32,7 +32,7 @@ export default function HomeView() {
         </div>
         <ChatBar />
         <a href="/about" className="block text-center font-mono text-xs text-muted underline-offset-4 hover:underline">
-          Why Gainzeville exists
+          Why Gainzville exists
         </a>
       </div>
     </main>

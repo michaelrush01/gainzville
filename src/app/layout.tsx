@@ -21,7 +21,7 @@ const sora = Sora({
 });
 
 export const metadata: Metadata = {
-  title: "Gainzeville",
+  title: "Gainzville",
   description: "Smart protein on a student budget. Scan a meal, see the protein and what it cost you.",
 };
 
