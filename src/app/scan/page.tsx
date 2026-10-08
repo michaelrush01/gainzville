@@ -18,7 +18,7 @@ export default function ScanPage() {
   const busyRef = useRef(false);
 
   const [mode, setMode] = useState<Mode>("auto");
-  const [status, setStatus] = useState("Point at a meal, barcode, or label");
+  const [status, setStatus] = useState("Point at a meal, package, barcode, or label");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 

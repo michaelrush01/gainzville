@@ -26,7 +26,7 @@ export default function ResultView() {
 
   if (!result) return null;
 
-  const isPackaged = result.kind === "barcode" || result.kind === "label";
+  const isPackaged = result.kind !== "meal";
   const mult = isPackaged ? servings : 1;
   const protein = Math.round(result.protein * mult);
   const calories = Math.round(result.calories * mult);
@@ -141,11 +141,14 @@ export default function ResultView() {
           <p className="mt-4 font-body text-sm text-muted">{tip}</p>
         </div>
 
-        {result.kind === "meal" && (
+        {(result.kind === "meal" || result.kind === "product") && (
           <div className="mt-5">
             {!fixOpen ? (
               <button onClick={() => setFixOpen(true)} className="font-mono text-sm text-muted">
-                Not quite right? <span className="text-heading underline underline-offset-4">Fix portions</span>
+                Not quite right?{" "}
+                <span className="text-heading underline underline-offset-4">
+                  {result.kind === "product" ? "Fix product" : "Fix portions"}
+                </span>
               </button>
             ) : (
               <div className="flex gap-2">
@@ -153,7 +156,7 @@ export default function ResultView() {
                   autoFocus
                   value={fixText}
                   onChange={(e) => setFixText(e.target.value)}
-                  placeholder="e.g. that's turkey, double rice"
+                  placeholder={result.kind === "product" ? "e.g. it's the BBQ flavor" : "e.g. that's turkey, double rice"}
                   className="glass min-w-0 flex-1 rounded-full px-4 py-3 font-mono text-sm text-text placeholder:text-muted focus:outline-none"
                 />
                 <button onClick={applyFix} disabled={fixing} className="rounded-full bg-accent px-4 font-mono text-sm font-bold text-on-accent disabled:opacity-50">
@@ -174,7 +177,10 @@ export default function ResultView() {
           </button>
         </div>
 
-        {result.kind === "barcode" && (
+        {result.matchedFrom && (
+          <p className="mt-3 font-mono text-xs text-muted">Matched from your photo: {result.matchedFrom}</p>
+        )}
+        {(result.kind === "barcode" || (result.kind === "product" && result.confidence === "verified")) && (
           <p className="mt-6 text-center font-mono text-[10px] text-muted">
             Product data from Open Food Facts (ODbL)
           </p>

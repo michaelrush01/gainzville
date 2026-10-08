@@ -1,4 +1,4 @@
-export type ScanKind = "meal" | "barcode" | "label";
+export type ScanKind = "meal" | "barcode" | "label" | "product";
 
 export type ScanResult = {
   kind: ScanKind;
@@ -15,6 +15,8 @@ export type ScanResult = {
   /** For barcode/label: macros are per serving and can be multiplied */
   servingLabel?: string;
   imageUrl?: string;
+  /** For product photos: what the AI read off the package before matching */
+  matchedFrom?: string;
   /** Set when the model is unsure and wants a better photo */
   retakeReason?: string | null;
 };

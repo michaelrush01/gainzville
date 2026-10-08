@@ -46,7 +46,7 @@ function checkQuality(ctx: CanvasRenderingContext2D, w: number, h: number): stri
     sum += g;
   }
   const brightness = sum / gray.length;
-  if (brightness < 40) return "Too dark. Try near a window or turn on a light.";
+  if (brightness < 22) return "Too dark. Try near a window or turn on a light.";
 
   // Variance of a Laplacian filter: low variance means few sharp edges, so likely blurry
   let lapSum = 0;
@@ -62,6 +62,7 @@ function checkQuality(ctx: CanvasRenderingContext2D, w: number, h: number): stri
     }
   }
   const variance = lapSq / n - (lapSum / n) ** 2;
-  if (variance < 25) return "Looks blurry. Hold steady and tap to focus.";
+  // Only block extreme blur; the AI handles normal phone photos fine
+  if (variance < 4) return "Looks very blurry. Hold steady and tap to focus.";
   return null;
 }
