@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { getProfile, saveProfile } from "@/lib/profile";
+import { CAMPUSES } from "@/lib/places";
 import { computeTargets } from "@/lib/targets";
 import type { Goal, Training, UserLocation } from "@/lib/types";
 
@@ -26,7 +27,6 @@ const BUDGETS: Choice<number>[] = [
   { value: 50, title: "Balanced", sub: "$50 a week", icon: "$$" },
   { value: 75, title: "Flexible", sub: "$75+ a week", icon: "$$$" },
 ];
-const CAMPUSES = ["University of Florida", "Florida State", "UCF", "USF", "Other"];
 
 export default function OnboardingView() {
   const router = useRouter();
@@ -43,6 +43,7 @@ export default function OnboardingView() {
   const [locMode, setLocMode] = useState<"none" | "zip" | "campus">("none");
   const [zip, setZip] = useState("");
   const [locNote, setLocNote] = useState<string | null>(null);
+  const [campusQuery, setCampusQuery] = useState("");
 
   const idx = STEPS.indexOf(step as (typeof STEPS)[number]);
   const next = () => setStep(STEPS[idx + 1] ?? "done");
@@ -123,7 +124,7 @@ export default function OnboardingView() {
 
       {step === "stats" && (
         <div className="space-y-4">
-          <Stepper label="WEIGHT" display={`${weight} lb`} onChange={(d) => { setWeight((w) => clamp(w + d * 5, 80, 400)); setStatsTouched(true); }} />
+          <Stepper label="WEIGHT" display={`${weight} lb`} onChange={(d) => { setWeight((w) => clamp(w + d, 80, 400)); setStatsTouched(true); }} />
           <Stepper label="HEIGHT" display={`${Math.floor(heightIn / 12)}' ${heightIn % 12}"`} onChange={(d) => { setHeightIn((h) => clamp(h + d, 48, 90)); setStatsTouched(true); }} />
           <Stepper label="AGE" display={`${age} yrs`} onChange={(d) => { setAge((a) => clamp(a + d, 13, 99)); setStatsTouched(true); }} />
           <p className="text-center font-mono text-sm text-muted">Optional. Sharpens your protein target.</p>
@@ -145,10 +146,15 @@ export default function OnboardingView() {
           {locMode === "zip" && (
             <form
               className="flex gap-2"
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 if (!/^\d{5}$/.test(zip)) return setLocNote("Enter a 5-digit ZIP.");
-                setLocation({ type: "zip", zip });
+                setLocNote("Looking up that ZIP…");
+                const res = await fetch(`/api/geocode?zip=${zip}`);
+                const data = await res.json();
+                if (!res.ok) return setLocNote(data.error ?? "Couldn't find that ZIP.");
+                setLocation({ type: "zip", zip, place: data.place, center: { lat: data.lat, lng: data.lng } });
+                setLocNote(null);
                 setStep("done");
               }}
             >
@@ -166,16 +172,27 @@ export default function OnboardingView() {
           )}
           <OptionCard title="Pick my campus" sub="Stores near your school" icon="⌂" selected={locMode === "campus"} onClick={() => setLocMode("campus")} />
           {locMode === "campus" && (
-            <div className="flex flex-wrap gap-2">
-              {CAMPUSES.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => { setLocation({ type: "campus", campus: c }); setStep("done"); }}
-                  className="glass rounded-full px-4 py-2 font-mono text-sm text-text"
-                >
-                  {c}
-                </button>
-              ))}
+            <div className="space-y-2">
+              <input
+                autoFocus
+                value={campusQuery}
+                onChange={(e) => setCampusQuery(e.target.value)}
+                placeholder="Search schools or cities"
+                className="glass w-full rounded-full px-5 py-3 font-mono text-sm text-text placeholder:text-muted focus:outline-none"
+              />
+              <div className="glass max-h-48 space-y-1 overflow-y-auto rounded-3xl p-2">
+                {CAMPUSES.filter((c) => `${c.name} ${c.city}`.toLowerCase().includes(campusQuery.toLowerCase())).map((c) => (
+                  <button
+                    key={c.name}
+                    onClick={() => { setLocation({ type: "campus", campus: c.name }); setStep("done"); }}
+                    className="flex w-full justify-between rounded-2xl px-4 py-2 text-left hover:bg-track"
+                  >
+                    <span className="font-mono text-sm text-text">{c.name}</span>
+                    <span className="font-mono text-xs text-muted">{c.city}</span>
+                  </button>
+                ))}
+                <p className="px-4 py-2 font-mono text-xs text-muted">Not listed? Use your ZIP instead.</p>
+              </div>
             </div>
           )}
           {locNote && <p className="text-center font-mono text-xs text-muted">{locNote}</p>}
@@ -275,10 +292,61 @@ function Stepper({ label, display, onChange }: { label: string; display: string;
         <p className="mt-1 font-mono text-3xl font-bold text-text">{display}</p>
       </div>
       <div className="flex gap-3">
-        <button onClick={() => onChange(-1)} aria-label={`Decrease ${label}`} className="h-12 w-12 rounded-full bg-track font-mono text-xl text-accent">−</button>
-        <button onClick={() => onChange(1)} aria-label={`Increase ${label}`} className="h-12 w-12 rounded-full bg-track font-mono text-xl text-accent">+</button>
+        <HoldButton label={`Decrease ${label}`} onStep={() => onChange(-1)}>−</HoldButton>
+        <HoldButton label={`Increase ${label}`} onStep={() => onChange(1)}>+</HoldButton>
       </div>
     </div>
+  );
+}
+
+/** Tap to step once; press and hold to keep stepping, speeding up the longer you hold. */
+function HoldButton({ label, onStep, children }: { label: string; onStep: () => void; children: ReactNode }) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stepRef = useRef(onStep);
+  useEffect(() => {
+    stepRef.current = onStep;
+  });
+
+  function stop() {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  }
+
+  function start() {
+    stop();
+    stepRef.current();
+    let delay = 400; // pause before repeating starts
+    const tick = () => {
+      stepRef.current();
+      delay = Math.max(40, delay * 0.8); // accelerate
+      timer.current = setTimeout(tick, delay);
+    };
+    timer.current = setTimeout(tick, delay);
+  }
+
+  useEffect(() => stop, []);
+
+  return (
+    <button
+      aria-label={label}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        start();
+      }}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      onContextMenu={(e) => e.preventDefault()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onStep();
+        }
+      }}
+      className="h-12 w-12 touch-none select-none rounded-full bg-track font-mono text-xl text-accent active:bg-accent active:text-on-accent"
+    >
+      {children}
+    </button>
   );
 }
 

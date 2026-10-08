@@ -27,7 +27,7 @@ export type Training = "casual" | "committed" | "dedicated";
 
 /** Coarse location only: a ZIP, a campus, or a rounded point. Never continuous tracking. */
 export type UserLocation =
-  | { type: "zip"; zip: string }
+  | { type: "zip"; zip: string; place?: string; center?: { lat: number; lng: number } }
   | { type: "campus"; campus: string }
   | { type: "point"; lat: number; lng: number };
 
