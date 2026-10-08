@@ -80,26 +80,21 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Pr
     map.current?.flyTo({ center: [center.lng, center.lat], zoom: 14.6, essential: true });
   }, [center.lat, center.lng]);
 
+  // Fly to a store when one is highlighted (tapped, or picked by the coach)
+  useEffect(() => {
+    const s = stores.find((x) => x.id === highlightId);
+    if (s) map.current?.flyTo({ center: [s.lng, s.lat], zoom: 15.5, essential: true, duration: 1400 });
+  }, [highlightId, stores]);
+
   // 3D / Flat toggle
   useEffect(() => {
     map.current?.easeTo({ pitch: mode === "3d" ? 60 : 0, bearing: mode === "3d" ? -20 : 0, duration: 700 });
   }, [mode]);
 
-  // Store pins (wait for the map to exist, then draw)
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    const t = setInterval(() => {
-      if (map.current) {
-        setReady(true);
-        clearInterval(t);
-      }
-    }, 150);
-    return () => clearInterval(t);
-  }, []);
-
+  // Store pins (drawn once the themed style has loaded)
   useEffect(() => {
     const m = map.current;
-    if (!ready || !m) return;
+    if (!themed || !m) return;
     markers.current.forEach((mk) => mk.remove());
     markers.current = [];
     for (const s of stores) {
@@ -124,7 +119,7 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Pr
       me.className = "gz-me";
       markers.current.push(new maplibregl.Marker({ element: me }).setLngLat([center.lng, center.lat]).addTo(m));
     }
-  }, [ready, stores, highlightId, showUser, center.lat, center.lng, onSelect]);
+  }, [themed, stores, highlightId, showUser, center.lat, center.lng, onSelect]);
 
   return (
     <div className="relative h-full w-full">

@@ -52,3 +52,50 @@ export async function askStructured<T>(opts: {
   if (!text || text.type !== "text") throw new Error("No result from model");
   return JSON.parse(text.text) as T;
 }
+
+export type ChatTurn = { role: "user" | "assistant"; content: string };
+export type ToolCall = { name: string; input: Record<string, unknown> };
+
+/**
+ * One chat reply. The model may call tools (change the plan, point at stores). We don't run them here:
+ * we acknowledge them so the model can finish its answer, and hand the calls to the app to act on.
+ */
+export async function chatReply(opts: {
+  system: string;
+  messages: ChatTurn[];
+  tools: Anthropic.Tool[];
+  toolAck: (call: ToolCall) => string;
+  maxTokens?: number;
+}): Promise<{ text: string; toolCalls: ToolCall[] }> {
+  const messages: Anthropic.MessageParam[] = opts.messages.map((m) => ({ role: m.role, content: m.content }));
+  const toolCalls: ToolCall[] = [];
+  const texts: string[] = [];
+
+  for (let round = 0; round < 3; round++) {
+    const res = await getClient().messages.create({
+      model: MODELS.chat,
+      max_tokens: opts.maxTokens ?? 1600,
+      system: opts.system,
+      tools: opts.tools,
+      messages,
+    });
+    for (const b of res.content) {
+      if (b.type === "text" && b.text.trim()) texts.push(b.text.trim());
+      if (b.type === "tool_use") toolCalls.push({ name: b.name, input: b.input as Record<string, unknown> });
+    }
+    if (res.stop_reason === "max_tokens") console.warn("chat reply hit max_tokens");
+    if (res.stop_reason !== "tool_use") break;
+
+    // Acknowledge each tool call so the model can write the rest of its answer
+    messages.push({ role: "assistant", content: res.content });
+    messages.push({
+      role: "user",
+      content: res.content.flatMap((b) =>
+        b.type === "tool_use"
+          ? [{ type: "tool_result" as const, tool_use_id: b.id, content: opts.toolAck({ name: b.name, input: b.input as Record<string, unknown> }) }]
+          : [],
+      ),
+    });
+  }
+  return { text: texts.join("\n\n"), toolCalls };
+}

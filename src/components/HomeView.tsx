@@ -4,11 +4,11 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChatBar } from "@/components/ChatBar";
+import { CoachChat } from "@/components/CoachChat";
 import { GridMap } from "@/components/GridMap";
 import { Ring } from "@/components/Ring";
 import { locationCenter, locationLabel, type Store } from "@/lib/places";
-import { getProfile, todayTotals } from "@/lib/profile";
+import { getProfile, saveProfile, todayTotals } from "@/lib/profile";
 import { supabase, supabaseConfigured } from "@/lib/supabase";
 import type { Profile } from "@/lib/types";
 
@@ -29,8 +29,9 @@ export default function HomeView() {
   return <Home profile={profile} />;
 }
 
-function Home({ profile }: { profile: Profile }) {
-  const totals = todayTotals();
+function Home({ profile: initial }: { profile: Profile }) {
+  const [profile, setProfile] = useState(initial);
+  const [totals] = useState(todayTotals);
   const center = useMemo(() => locationCenter(profile.location), [profile.location]);
   const [stores, setStores] = useState<Store[]>([]);
   const [budgetOnly, setBudgetOnly] = useState(false);
@@ -50,6 +51,7 @@ function Home({ profile }: { profile: Profile }) {
     };
   }, [center]);
 
+  const [chatOpen, setChatOpen] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
   useEffect(() => {
     if (!supabaseConfigured()) return;
@@ -60,10 +62,32 @@ function Home({ profile }: { profile: Profile }) {
 
   const shown = budgetOnly ? stores.filter((s) => s.tier === "budget") : stores;
   const onSelect = useCallback((s: Store) => setSelected(s), []);
+
+  // Coach actions
+  const applyPlan = useCallback(
+    (change: Partial<Profile> & { summary?: string }) => {
+      const { summary: _summary, ...fields } = change;
+      void _summary;
+      const updated = { ...profile, ...fields };
+      saveProfile(updated);
+      setProfile(updated);
+    },
+    [profile],
+  );
+  const highlight = useCallback(
+    (ids: string[]) => {
+      const first = stores.find((s) => s.id === ids[0]);
+      if (first) {
+        setBudgetOnly(false);
+        setSelected(first);
+      }
+    },
+    [stores],
+  );
   const dailyBudget = profile.weeklyBudget / 7;
 
   return (
-    <main className="relative flex h-dvh flex-col">
+    <main className="relative flex h-dvh flex-col overflow-hidden">
       <header className="absolute left-5 top-5 z-10">
         <h1 className="glitch font-display text-3xl font-bold text-text">
           Gainz<span className="text-accent">ville</span>
@@ -83,7 +107,7 @@ function Home({ profile }: { profile: Profile }) {
         )}
       </header>
 
-      <div className="relative flex-1">
+      <div className="relative min-h-[24dvh] flex-1">
         {center ? (
           <StoreMap center={center} stores={shown} showUser={profile.location?.type === "point"} highlightId={selected?.id} onSelect={onSelect} />
         ) : (
@@ -125,16 +149,24 @@ function Home({ profile }: { profile: Profile }) {
             </a>
           </div>
         )}
-        <div className="glass flex justify-around rounded-3xl py-4">
+        <div className={`glass flex justify-around rounded-3xl py-4 ${chatOpen ? "hidden" : ""}`}>
           <Ring label="Protein" value={totals.protein} max={profile.proteinTarget} display={`${Math.round(totals.protein)}g`} />
           <Ring label="Calories" value={totals.calories} max={profile.calorieTarget} display={`${Math.round(totals.calories)}`} />
           <Ring label="Budget" value={totals.spent} max={dailyBudget} display={`$${totals.spent.toFixed(0)}`} />
         </div>
-        <ChatBar />
+        <CoachChat
+          profile={profile}
+          today={totals}
+          stores={stores}
+          place={locationLabel(profile.location)}
+          onApplyPlan={applyPlan}
+          onHighlight={highlight}
+          onOpenChange={setChatOpen}
+        />
         <div className="flex justify-center gap-6 font-mono text-xs text-muted">
           <Link href="/account" className="underline-offset-4 hover:underline">{signedIn ? "✓ Account" : "Save progress"}</Link>
-          <Link href="/onboarding" className="underline-offset-4 hover:underline">Edit my plan</Link>
-          <Link href="/about" className="underline-offset-4 hover:underline">Why Gainzville exists</Link>
+          <Link href="/onboarding" className="underline-offset-4 hover:underline">My plan</Link>
+          <Link href="/about" className="underline-offset-4 hover:underline">About</Link>
         </div>
       </div>
     </main>
