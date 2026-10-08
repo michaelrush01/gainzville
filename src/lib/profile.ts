@@ -9,11 +9,16 @@ const PROFILE_KEY = "gz.profile";
 const LOG_KEY = "gz.log";
 
 export const DEFAULT_PROFILE: Profile = {
+  onboarded: false,
   goal: "maintain",
+  training: "committed",
   weightLb: null,
+  heightIn: null,
+  age: null,
   proteinTarget: 150,
   calorieTarget: 2400,
   weeklyBudget: 50,
+  location: null,
 };
 
 function read<T>(key: string, fallback: T): T {

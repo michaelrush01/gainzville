@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { ChatBar } from "@/components/ChatBar";
 import { GridMap } from "@/components/GridMap";
 import { Ring } from "@/components/Ring";
@@ -7,8 +9,15 @@ import { getProfile, todayTotals } from "@/lib/profile";
 
 // Rendered in the browser only (see app/page.tsx), so saved data can be read directly.
 export default function HomeView() {
+  const router = useRouter();
   const profile = getProfile();
   const totals = todayTotals();
+
+  // First visit: send new users through onboarding
+  useEffect(() => {
+    if (!profile.onboarded) router.replace("/onboarding");
+  }, [profile.onboarded, router]);
+  if (!profile.onboarded) return null;
 
   const dailyBudget = profile.weeklyBudget / 7;
 
@@ -31,9 +40,10 @@ export default function HomeView() {
           <Ring label="Budget" value={totals.spent} max={dailyBudget} display={`$${totals.spent.toFixed(0)}`} />
         </div>
         <ChatBar />
-        <a href="/about" className="block text-center font-mono text-xs text-muted underline-offset-4 hover:underline">
-          Why Gainzville exists
-        </a>
+        <div className="flex justify-center gap-6 font-mono text-xs text-muted">
+          <a href="/onboarding" className="underline-offset-4 hover:underline">Edit my plan</a>
+          <a href="/about" className="underline-offset-4 hover:underline">Why Gainzville exists</a>
+        </div>
       </div>
     </main>
   );

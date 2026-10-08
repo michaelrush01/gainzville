@@ -23,12 +23,25 @@ export type ScanResult = {
 
 export type Goal = "cut" | "maintain" | "bulk";
 
+export type Training = "casual" | "committed" | "dedicated";
+
+/** Coarse location only: a ZIP, a campus, or a rounded point. Never continuous tracking. */
+export type UserLocation =
+  | { type: "zip"; zip: string }
+  | { type: "campus"; campus: string }
+  | { type: "point"; lat: number; lng: number };
+
 export type Profile = {
+  onboarded: boolean;
   goal: Goal;
+  training: Training;
   weightLb: number | null;
+  heightIn: number | null;
+  age: number | null;
   proteinTarget: number; // grams per day
   calorieTarget: number; // kcal per day
   weeklyBudget: number; // USD
+  location: UserLocation | null;
 };
 
 export type LogEntry = {
