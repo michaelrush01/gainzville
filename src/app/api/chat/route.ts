@@ -1,11 +1,10 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { aiConfigured, chatReply, type ChatTurn } from "@/lib/ai";
 import { COACH_RULES } from "@/lib/coach";
-import { checkLimit, clientIp } from "@/lib/rate-limit";
+import { limitMessage, takeQuota } from "@/lib/quota";
 import type { Store } from "@/lib/places";
 import type { Profile } from "@/lib/types";
 
-const DAILY_MESSAGES = 60;
 const MAX_HISTORY = 12;
 
 const TOOLS: Anthropic.Tool[] = [
@@ -48,9 +47,6 @@ type Body = {
 export async function POST(request: Request) {
   if (!aiConfigured()) return Response.json({ error: "The coach isn't switched on yet." }, { status: 503 });
 
-  const limit = checkLimit(`chat:${clientIp(request)}`, DAILY_MESSAGES);
-  if (!limit.ok) return Response.json({ error: "Daily chat limit reached. Come back tomorrow." }, { status: 429 });
-
   const body = (await request.json().catch(() => null)) as Body | null;
   if (!body || !Array.isArray(body.messages) || body.messages.length === 0) {
     return Response.json({ error: "Say something first." }, { status: 400 });
@@ -63,6 +59,11 @@ export async function POST(request: Request) {
     .map((m) => ({ role: m.role, content: m.content.slice(0, 2000) }));
   while (history.length && history[0].role !== "user") history.shift();
   if (!history.length) return Response.json({ error: "Say something first." }, { status: 400 });
+
+  const quota = await takeQuota(request, "chat");
+  if (!quota.ok) {
+    return Response.json({ error: limitMessage("chat", quota.signedIn), limited: true, signedIn: quota.signedIn }, { status: 429 });
+  }
 
   const p = body.profile;
   const stores = (body.stores ?? []).slice(0, 15);

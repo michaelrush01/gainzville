@@ -19,3 +19,10 @@ export function supabase() {
   }
   return client;
 }
+
+/** Adds the signed-in user's token so the server can give them signed-in limits. */
+export async function authHeaders(): Promise<Record<string, string>> {
+  if (!supabaseConfigured()) return {};
+  const { data } = await supabase().auth.getSession();
+  return data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {};
+}

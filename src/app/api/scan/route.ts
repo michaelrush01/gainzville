@@ -1,9 +1,8 @@
 import { aiConfigured, askStructured } from "@/lib/ai";
 import { searchProduct } from "@/lib/food-search";
-import { checkLimit, clientIp } from "@/lib/rate-limit";
+import { limitMessage, takeQuota } from "@/lib/quota";
 import type { ScanResult } from "@/lib/types";
 
-const DAILY_AI_SCANS = 15;
 const MAX_IMAGE_BYTES = 4_000_000;
 
 const SYSTEM = `You read food photos for a budget nutrition app for college students who lift.
@@ -80,10 +79,13 @@ export async function POST(request: Request) {
     if (image.length * 0.75 > MAX_IMAGE_BYTES) {
       return Response.json({ error: "That photo is too large." }, { status: 413 });
     }
-    const limit = checkLimit(clientIp(request), DAILY_AI_SCANS);
-    if (!limit.ok) {
-      return Response.json({ error: "Daily scan limit reached. Barcodes are still unlimited." }, { status: 429 });
-    }
+  }
+  const quota = await takeQuota(request, isCorrection ? "fix" : "scan");
+  if (!quota.ok) {
+    return Response.json(
+      { error: limitMessage(isCorrection ? "fix" : "scan", quota.signedIn), limited: true, signedIn: quota.signedIn },
+      { status: 429 },
+    );
   }
 
   try {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Store } from "@/lib/places";
 import type { Profile } from "@/lib/types";
+import { authHeaders } from "@/lib/supabase";
 
 type PlanChange = Partial<Pick<Profile, "goal" | "training" | "calorieTarget" | "proteinTarget" | "weeklyBudget">> & {
   summary: string;
@@ -68,7 +69,7 @@ export function CoachChat({ profile, today, stores, place, onApplyPlan, onHighli
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({
           messages: next.map(({ role, content }) => ({ role, content })),
           profile,

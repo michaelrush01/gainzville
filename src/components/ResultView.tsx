@@ -6,6 +6,7 @@ import { Ring } from "@/components/Ring";
 import { addToLog, getProfile, readStashedResult, stashResult, todayTotals } from "@/lib/profile";
 import { goalTip } from "@/lib/tips";
 import { proteinPerDollar, type ScanResult } from "@/lib/types";
+import { authHeaders } from "@/lib/supabase";
 
 // Rendered in the browser only (see app/scan/result/page.tsx).
 export default function ResultView() {
@@ -46,7 +47,7 @@ export default function ResultView() {
     const { imageUrl, ...previous } = result;
     const res = await fetch("/api/scan", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify({ correction: fixText, previous }),
     });
     const data = await res.json();

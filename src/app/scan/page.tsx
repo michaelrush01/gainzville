@@ -6,6 +6,7 @@ import type { IScannerControls } from "@zxing/browser";
 import { prepareFile, prepareImage, type PreparedImage } from "@/lib/image-check";
 import { stashResult } from "@/lib/profile";
 import type { ScanResult } from "@/lib/types";
+import { authHeaders } from "@/lib/supabase";
 
 type Mode = "auto" | "meal" | "barcode" | "label";
 const MODES: Mode[] = ["auto", "meal", "barcode", "label"];
@@ -49,7 +50,7 @@ export default function ScanPage() {
     setStatus(mode === "label" ? "Reading label…" : "Analyzing…");
     const res = await fetch("/api/scan", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify({ image: img.base64, mediaType: img.mediaType, mode }),
     });
     const data = await res.json();
