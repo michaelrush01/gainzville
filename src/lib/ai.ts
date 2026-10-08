@@ -21,15 +21,13 @@ function getClient() {
 type ImageInput = { base64: string; mediaType: "image/jpeg" | "image/png" | "image/webp" };
 
 /**
- * Ask a model for structured JSON by forcing a single tool call.
- * Returns the tool input, which the model fills to match `schema`.
+ * Ask a model for JSON that matches `schema`, using Claude's structured outputs.
  */
 export async function askStructured<T>(opts: {
   model: keyof typeof MODELS;
   system: string;
   prompt: string;
   image?: ImageInput;
-  toolName: string;
   schema: Record<string, unknown>;
   maxTokens?: number;
 }): Promise<T> {
@@ -46,18 +44,11 @@ export async function askStructured<T>(opts: {
     model: MODELS[opts.model],
     max_tokens: opts.maxTokens ?? 1024,
     system: opts.system,
-    tools: [
-      {
-        name: opts.toolName,
-        description: "Return the result in this exact structure.",
-        input_schema: opts.schema as Anthropic.Tool.InputSchema,
-      },
-    ],
-    tool_choice: { type: "tool", name: opts.toolName },
+    output_config: { effort: "low", format: { type: "json_schema", schema: opts.schema } },
     messages: [{ role: "user", content }],
   });
 
-  const block = res.content.find((b) => b.type === "tool_use");
-  if (!block || block.type !== "tool_use") throw new Error("No structured result from model");
-  return block.input as T;
+  const text = res.content.find((b) => b.type === "text");
+  if (!text || text.type !== "text") throw new Error("No result from model");
+  return JSON.parse(text.text) as T;
 }

@@ -26,7 +26,8 @@ const SCHEMA = {
     serving_label: { type: ["string", "null"] },
     retake_reason: { type: ["string", "null"] },
   },
-  required: ["kind", "name", "tags", "calories", "protein", "carbs", "fat", "cost_usd", "retake_reason"],
+  required: ["kind", "name", "tags", "calories", "protein", "carbs", "fat", "cost_usd", "serving_label", "retake_reason"],
+  additionalProperties: false,
 };
 
 type ModelOut = {
@@ -72,7 +73,6 @@ export async function POST(request: Request) {
     const out = await askStructured<ModelOut>({
       model: "vision",
       system: SYSTEM,
-      toolName: "food_result",
       schema: SCHEMA,
       prompt: isCorrection
         ? `Previous estimate: ${JSON.stringify(previous)}. The user says: "${String(correction).slice(0, 300)}". Re-estimate the meal with this correction.`
