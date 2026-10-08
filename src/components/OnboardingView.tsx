@@ -118,7 +118,14 @@ export default function OnboardingView() {
       progress={idx}
       onBack={idx > 0 ? () => setStep(STEPS[idx - 1]) : undefined}
     >
-      {step === "goal" && <Choices items={GOALS} selected={goal} onPick={(v) => { setGoal(v); next(); }} />}
+      {step === "goal" && (
+        <>
+          <Choices items={GOALS} selected={goal} onPick={(v) => { setGoal(v); next(); }} />
+          <a href="/account" className="mt-5 block text-center font-mono text-sm text-muted underline-offset-4 hover:underline">
+            Already have an account? <span className="text-heading">Sign in</span>
+          </a>
+        </>
+      )}
       {step === "training" && <Choices items={TRAINING} selected={training} onPick={(v) => { setTraining(v); next(); }} />}
       {step === "budget" && <Choices items={BUDGETS} selected={budget} onPick={(v) => { setBudget(v); next(); }} />}
 

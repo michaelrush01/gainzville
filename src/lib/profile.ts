@@ -1,9 +1,10 @@
 "use client";
 
+import { pushLogEntry, pushProfile } from "./sync";
 import type { LogEntry, Profile } from "./types";
 
-// v1 keeps the profile and today's log in the browser only.
-// Accounts come in a later step; this file is the one place to swap that in.
+// The browser copy is the source the app reads from. Signed-in users also get
+// every change written to their account (see sync.ts), so it follows them across devices.
 
 const PROFILE_KEY = "gz.profile";
 const LOG_KEY = "gz.log";
@@ -42,8 +43,9 @@ export function getProfile(): Profile {
   return { ...DEFAULT_PROFILE, ...read<Partial<Profile>>(PROFILE_KEY, {}) };
 }
 
-export function saveProfile(p: Profile) {
+export function saveProfile(p: Profile, opts: { sync?: boolean } = {}) {
   write(PROFILE_KEY, p);
+  if (opts.sync !== false) pushProfile(p).catch(() => {});
 }
 
 function isToday(iso: string) {
@@ -56,8 +58,23 @@ export function getTodayLog(): LogEntry[] {
 
 export function addToLog(entry: Omit<LogEntry, "id" | "at">) {
   const all = read<LogEntry[]>(LOG_KEY, []).filter((e) => isToday(e.at));
-  all.push({ ...entry, id: crypto.randomUUID(), at: new Date().toISOString() });
+  const full = { ...entry, id: crypto.randomUUID(), at: new Date().toISOString() };
+  all.push(full);
   write(LOG_KEY, all);
+  pushLogEntry(full).catch(() => {});
+}
+
+/** Replace today's log with a synced copy (after sign-in). */
+export function setTodayLog(entries: LogEntry[]) {
+  write(LOG_KEY, entries);
+}
+
+/** Forget everything stored on this device. */
+export function clearLocalData() {
+  try {
+    localStorage.removeItem(PROFILE_KEY);
+    localStorage.removeItem(LOG_KEY);
+  } catch {}
 }
 
 export function todayTotals() {

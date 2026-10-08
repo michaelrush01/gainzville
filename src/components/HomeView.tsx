@@ -9,6 +9,7 @@ import { GridMap } from "@/components/GridMap";
 import { Ring } from "@/components/Ring";
 import { locationCenter, locationLabel, type Store } from "@/lib/places";
 import { getProfile, todayTotals } from "@/lib/profile";
+import { supabase, supabaseConfigured } from "@/lib/supabase";
 import type { Profile } from "@/lib/types";
 
 // The map library is large, so it loads separately from the rest of the page.
@@ -48,6 +49,14 @@ function Home({ profile }: { profile: Profile }) {
       cancelled = true;
     };
   }, [center]);
+
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    if (!supabaseConfigured()) return;
+    supabase()
+      .auth.getSession()
+      .then(({ data }) => setSignedIn(Boolean(data.session)));
+  }, []);
 
   const shown = budgetOnly ? stores.filter((s) => s.tier === "budget") : stores;
   const onSelect = useCallback((s: Store) => setSelected(s), []);
@@ -123,6 +132,7 @@ function Home({ profile }: { profile: Profile }) {
         </div>
         <ChatBar />
         <div className="flex justify-center gap-6 font-mono text-xs text-muted">
+          <Link href="/account" className="underline-offset-4 hover:underline">{signedIn ? "✓ Account" : "Save progress"}</Link>
           <Link href="/onboarding" className="underline-offset-4 hover:underline">Edit my plan</Link>
           <Link href="/about" className="underline-offset-4 hover:underline">Why Gainzville exists</Link>
         </div>
