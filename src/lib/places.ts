@@ -60,6 +60,9 @@ export type Store = {
   lng: number;
   /** budget = discount chains and warehouse clubs */
   tier: "budget" | "standard" | "premium";
+  /** Restaurants carry a chain key (see lib/restaurants.ts); groceries leave it out */
+  kind?: "grocery" | "food";
+  chain?: string;
 };
 
 const BUDGET = /aldi|lidl|walmart|save.?a.?lot|costco|sam'?s club|food lion|winco|grocery outlet|bj'?s|dollar general|family dollar|price ?rite|food 4 less|fiesta|h-?e-?b|smart ?& ?final/i;

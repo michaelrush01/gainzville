@@ -11,6 +11,7 @@ import { getCoarsePosition } from "@/lib/geo";
 import { locationCenter, locationLabel, type Store } from "@/lib/places";
 import { getProfile, saveProfile, todayTotals } from "@/lib/profile";
 import { supabase, supabaseConfigured } from "@/lib/supabase";
+import { chainByKey, gramsPerDollar } from "@/lib/restaurants";
 import type { Profile } from "@/lib/types";
 
 // The map library is large, so it loads separately from the rest of the page.
@@ -36,6 +37,7 @@ function Home({ profile: initial }: { profile: Profile }) {
   const center = useMemo(() => locationCenter(profile.location), [profile.location]);
   const [stores, setStores] = useState<Store[]>([]);
   const [budgetOnly, setBudgetOnly] = useState(false);
+  const [showFood, setShowFood] = useState(true);
   const [selected, setSelected] = useState<Store | null>(null);
   const [loading, setLoading] = useState(Boolean(center));
   const [storeError, setStoreError] = useState(false);
@@ -118,7 +120,8 @@ function Home({ profile: initial }: { profile: Profile }) {
       .then(({ data }) => setSignedIn(Boolean(data.session)));
   }, []);
 
-  const shown = budgetOnly ? stores.filter((s) => s.tier === "budget") : stores;
+  const shown = stores.filter((s) => (s.kind === "food" ? showFood : !budgetOnly || s.tier === "budget"));
+  const selectedChain = selected?.kind === "food" ? chainByKey(selected.chain) : undefined;
   const onSelect = useCallback((s: Store) => setSelected(s), []);
 
   // Coach actions
@@ -137,6 +140,7 @@ function Home({ profile: initial }: { profile: Profile }) {
       const first = stores.find((s) => s.id === ids[0]);
       if (first) {
         setBudgetOnly(false);
+        setShowFood(true);
         setSelected(first);
       }
     },
@@ -160,6 +164,12 @@ function Home({ profile: initial }: { profile: Profile }) {
               className={`rounded-full px-3 py-1 font-mono text-[11px] ${budgetOnly ? "bg-accent font-bold text-on-accent" : "glass text-heading"}`}
             >
               $ Budget
+            </button>
+            <button
+              onClick={() => setShowFood((f) => !f)}
+              className={`rounded-full px-3 py-1 font-mono text-[11px] ${showFood ? "bg-food font-bold text-on-accent" : "glass text-heading"}`}
+            >
+              Food
             </button>
           </div>
         )}
@@ -216,12 +226,21 @@ function Home({ profile: initial }: { profile: Profile }) {
 
       <div className="relative z-10 space-y-4 px-4 pb-6">
         {selected && (
-          <div className="glass flex items-center justify-between rounded-3xl px-5 py-3">
-            <div>
+          <div className="glass flex items-center justify-between gap-3 rounded-3xl px-5 py-3">
+            <div className="min-w-0">
               <p className="font-display text-lg font-bold text-text">{selected.name}</p>
-              <p className="font-mono text-xs text-muted">
-                {selected.tier === "budget" ? "Budget pick for protein" : selected.tier === "premium" ? "Pricier, good for specialty items" : "Standard prices"}
-              </p>
+              {selectedChain ? (
+                <>
+                  <p className="font-mono text-xs text-heading">{selectedChain.order}</p>
+                  <p className="font-mono text-xs text-muted">
+                    ≈{selectedChain.protein}g protein · ~${selectedChain.price} · {gramsPerDollar(selectedChain).toFixed(1)}g per $
+                  </p>
+                </>
+              ) : (
+                <p className="font-mono text-xs text-muted">
+                  {selected.tier === "budget" ? "Budget pick for protein" : selected.tier === "premium" ? "Pricier, good for specialty items" : "Standard prices"}
+                </p>
+              )}
             </div>
             <a
               href={`https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}`}

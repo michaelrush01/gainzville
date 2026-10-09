@@ -74,7 +74,7 @@ export function CoachChat({ profile, today, stores, place, onApplyPlan, onHighli
           messages: next.map(({ role, content }) => ({ role, content })),
           profile,
           today,
-          stores: stores.map(({ id, name, tier }) => ({ id, name, tier })),
+          stores: stores.map(({ id, name, tier, kind, chain }) => ({ id, name, tier, kind, chain })),
           place,
         }),
       });

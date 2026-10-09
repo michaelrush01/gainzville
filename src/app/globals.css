@@ -6,6 +6,7 @@
   --card: #1d1730;
   --glass: rgba(29, 23, 48, 0.7);
   --accent: #b79cff;
+  --food: #ffb38a;
   --heading: #e6ddff;
   --text: #f1eef8;
   --muted: #9a90b5;
@@ -19,6 +20,7 @@
   --color-glass: var(--glass);
   --color-accent: var(--accent);
   --color-heading: var(--heading);
+  --color-food: var(--food);
   --color-text: var(--text);
   --color-muted: var(--muted);
   --color-track: var(--track);

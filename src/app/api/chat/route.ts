@@ -3,6 +3,7 @@ import { aiConfigured, chatReply, type ChatTurn } from "@/lib/ai";
 import { COACH_RULES } from "@/lib/coach";
 import { limitMessage, takeQuota } from "@/lib/quota";
 import type { Store } from "@/lib/places";
+import { chainByKey, type Chain } from "@/lib/restaurants";
 import type { Profile } from "@/lib/types";
 
 const MAX_HISTORY = 12;
@@ -27,7 +28,7 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "highlight_stores",
-    description: "Point the map at the nearby stores that best fit the answer. Use ids from the provided store list only.",
+    description: "Point the map at the nearby stores or restaurants that best fit the answer. Use ids from the provided lists only.",
     input_schema: {
       type: "object",
       properties: { store_ids: { type: "array", items: { type: "string" }, maxItems: 3 } },
@@ -40,7 +41,7 @@ type Body = {
   messages: ChatTurn[];
   profile: Profile;
   today: { protein: number; calories: number; spent: number };
-  stores: Pick<Store, "id" | "name" | "tier">[];
+  stores: Pick<Store, "id" | "name" | "tier" | "kind" | "chain">[];
   place: string | null;
 };
 
@@ -66,14 +67,23 @@ export async function POST(request: Request) {
   }
 
   const p = body.profile;
-  const stores = (body.stores ?? []).slice(0, 15);
+  const all = body.stores ?? [];
+  const stores = all.filter((s) => s.kind !== "food").slice(0, 12);
+  // Restaurant details come from our own chain list, never from the request
+  const food = all
+    .filter((s) => s.kind === "food")
+    .map((s) => ({ id: s.id, chain: chainByKey(s.chain) }))
+    .filter((r): r is { id: string; chain: Chain } => Boolean(r.chain))
+    .slice(0, 10);
   const context = `USER PLAN
 Goal: ${p.goal}. Training: ${p.training}. Weight: ${p.weightLb ?? "not given"} lb. Age: ${p.age ?? "not given"}.
 Targets: ${p.proteinTarget} g protein, ${p.calorieTarget} kcal per day. Budget: $${p.weeklyBudget}/week.
 Today so far: ${Math.round(body.today?.protein ?? 0)} g protein, ${Math.round(body.today?.calories ?? 0)} kcal, $${(body.today?.spent ?? 0).toFixed(2)} spent.
 Location: ${body.place ?? "not set"}.
 NEARBY STORES (id | name | price tier)
-${stores.length ? stores.map((s) => `${s.id} | ${s.name} | ${s.tier}`).join("\n") : "none loaded"}`;
+${stores.length ? stores.map((s) => `${s.id} | ${s.name} | ${s.tier}`).join("\n") : "none loaded"}
+NEARBY RESTAURANTS (id | chain | best protein order | approx protein, kcal, price)
+${food.length ? food.map(({ id, chain: c }) => `${id} | ${c.name} | ${c.order} | ~${c.protein} g, ${c.calories} kcal, ~$${c.price}`).join("\n") : "none loaded"}`;
 
   try {
     const { text, toolCalls } = await chatReply({

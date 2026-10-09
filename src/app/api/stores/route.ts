@@ -1,6 +1,7 @@
 import { storeTier, type Store } from "@/lib/places";
+import { CHAIN_PATTERN, chainFor } from "@/lib/restaurants";
 
-// Nearby grocery stores from OpenStreetMap (free, ODbL).
+// Nearby grocery stores and protein-friendly restaurant chains from OpenStreetMap (free, ODbL).
 // Asks two Overpass servers at once and uses whichever answers first (the main one
 // can take 15+ seconds when busy). Falls back to Nominatim if both fail.
 // Results are cached per ~1 km area so we stay polite to these free services.
@@ -10,6 +11,7 @@ export const maxDuration = 30;
 const UA = "Gainzville/0.1 (student project)";
 const RADIUS_M = 6000; // a short drive: big-box stores like Trader Joe's are rarely right on campus
 const MAX_STORES = 45;
+const MAX_FOOD = 20;
 const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
 const cache = new Map<string, { at: number; stores: Store[] }>();
 const DAY = 24 * 60 * 60 * 1000;
@@ -34,7 +36,9 @@ export async function GET(request: Request) {
 }
 
 async function fromOverpass(lat: number, lng: number): Promise<Store[] | null> {
-  const query = `[out:json][timeout:20];nwr["shop"~"^(supermarket|wholesale|greengrocer)$"](around:${RADIUS_M},${lat},${lng});out center tags;`;
+  const around = `(around:${RADIUS_M},${lat},${lng})`;
+  const food = `["amenity"~"^(fast_food|restaurant)$"]`;
+  const query = `[out:json][timeout:20];(nwr["shop"~"^(supermarket|wholesale|greengrocer)$"]${around};nwr${food}["brand"~"^(${CHAIN_PATTERN})",i]${around};nwr${food}["name"~"^(${CHAIN_PATTERN})",i]${around};);out center tags;`;
   const ask = async (url: string) => {
     const res = await fetch(url, {
       method: "POST",
@@ -48,15 +52,30 @@ async function fromOverpass(lat: number, lng: number): Promise<Store[] | null> {
   };
   try {
     const elements = await Promise.any(OVERPASS.map(ask));
-    const stores: Store[] = [];
+    const groceries: Store[] = [];
+    const restaurants: Store[] = [];
     for (const el of elements) {
       const name = el.tags?.name || el.tags?.brand;
       const pLat = el.lat ?? el.center?.lat;
       const pLng = el.lon ?? el.center?.lon;
       if (!name || pLat == null || pLng == null) continue;
-      stores.push({ id: `osm-${el.type}-${el.id}`, name, lat: pLat, lng: pLng, tier: storeTier(name) });
+      const base = { id: `osm-${el.type}-${el.id}`, lat: pLat, lng: pLng };
+      if (el.tags?.shop) {
+        groceries.push({ ...base, name, tier: storeTier(name), kind: "grocery" });
+        continue;
+      }
+      const chain = chainFor(el.tags?.brand || name) ?? chainFor(name);
+      if (chain) restaurants.push({ ...base, name: chain.name, tier: "standard", kind: "food", chain: chain.key });
     }
-    return stores.length ? nearest(stores, lat, lng) : null;
+    if (!groceries.length) return null;
+    // Up to 2 locations per chain, so the map shows variety instead of five Subways
+    const perChain = new Map<string, number>();
+    const food = nearest(restaurants, lat, lng).filter((r) => {
+      const n = (perChain.get(r.chain!) ?? 0) + 1;
+      perChain.set(r.chain!, n);
+      return n <= 2;
+    });
+    return [...nearest(groceries, lat, lng), ...food.slice(0, MAX_FOOD)];
   } catch {
     return null;
   }
@@ -97,7 +116,7 @@ async function fromNominatim(lat: number, lng: number): Promise<Store[] | null> 
         const id = `osm-${p.osm_type}-${p.osm_id}`;
         if (!p.name || seen.has(id)) continue;
         seen.add(id);
-        stores.push({ id, name: p.name, lat: Number(p.lat), lng: Number(p.lon), tier: storeTier(p.name) });
+        stores.push({ id, name: p.name, lat: Number(p.lat), lng: Number(p.lon), tier: storeTier(p.name), kind: "grocery" });
       }
     } catch {
       /* try the next query */

@@ -26,6 +26,7 @@ const C = {
   pinEdge: "rgba(183,156,255,0.45)",
   accent: "#b79cff",
   heading: "#e6ddff",
+  food: "#ffb38a",
 };
 
 type Props = {
@@ -118,7 +119,7 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Pr
         "text-field": ["get", "name"],
         "text-font": ["Noto Sans Bold"],
         "text-size": 11,
-        "icon-image": ["case", ["get", "hot"], "pin-hot", ["==", ["get", "tier"], "budget"], "pin-budget", "pin"],
+        "icon-image": ["case", ["get", "hot"], "pin-hot", ["==", ["get", "kind"], "food"], "pin-food", ["==", ["get", "tier"], "budget"], "pin-budget", "pin"],
         "icon-text-fit": "both",
         "icon-text-fit-padding": [2, 8, 2, 8],
         "text-anchor": "bottom",
@@ -128,7 +129,7 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Pr
         "text-padding": 4,
       },
       paint: {
-        "text-color": ["case", ["any", ["get", "hot"], ["==", ["get", "tier"], "budget"]], C.ground, C.textBright],
+        "text-color": ["case", ["any", ["get", "hot"], ["==", ["get", "tier"], "budget"], ["==", ["get", "kind"], "food"]], C.ground, C.textBright],
       },
     });
     m.on("click", "store-pins", (e) => {
@@ -152,7 +153,7 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Pr
         return {
           type: "Feature",
           geometry: { type: "Point", coordinates: [s.lng, s.lat] },
-          properties: { id: s.id, name: s.name, tier: s.tier ?? "standard", hot, rank: hot ? 0 : (s.tier === "budget" ? 1 : 1000) + i },
+          properties: { id: s.id, name: s.name, tier: s.tier ?? "standard", kind: s.kind ?? "grocery", hot, rank: hot ? 0 : (s.tier === "budget" ? 1 : s.kind === "food" ? 500 : 1000) + i },
         };
       }),
     });
@@ -164,7 +165,7 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Pr
       const bounds = new maplibregl.LngLatBounds([center.lng, center.lat], [center.lng, center.lat]);
       // Closest dozen only, so one far-off store doesn't zoom the map way out
       stores
-        .filter((s) => distanceKm(center, s) < 8)
+        .filter((s) => s.kind !== "food" && distanceKm(center, s) < 8)
         .slice(0, 12)
         .forEach((s) => bounds.extend([s.lng, s.lat]));
       m.fitBounds(bounds, { padding: { top: 110, bottom: 40, left: 40, right: 40 }, maxZoom: 15.2, pitch: m.getPitch(), bearing: m.getBearing(), duration: 1200 });
@@ -278,6 +279,7 @@ function addPinImages(m: MLMap) {
   };
   make("pin", C.pin, C.pinEdge, 1);
   make("pin-budget", C.accent, C.accent, 1);
+  make("pin-food", C.food, C.food, 1);
   make("pin-hot", C.accent, C.heading, 3);
 }
 
