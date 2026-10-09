@@ -21,6 +21,7 @@ const sora = Sora({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://gainzville-ai.vercel.app"),
   title: "Gainzville",
   description: "Smart protein on a student budget. Scan a meal, see the protein and what it cost you.",
   // Full-screen when added to an iPhone home screen
