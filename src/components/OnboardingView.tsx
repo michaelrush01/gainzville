@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { getProfile, saveProfile } from "@/lib/profile";
+import { getCoarsePosition } from "@/lib/geo";
 import { CAMPUSES } from "@/lib/places";
 import { computeTargets } from "@/lib/targets";
 import type { Goal, Training, UserLocation } from "@/lib/types";
@@ -31,7 +32,10 @@ const BUDGETS: Choice<number>[] = [
 export default function OnboardingView() {
   const router = useRouter();
   const start = getProfile();
-  const [step, setStep] = useState<Step>("goal");
+  // "/onboarding?step=location" jumps straight to the location step (from the map)
+  const [step, setStep] = useState<Step>(() =>
+    start.onboarded && new URLSearchParams(window.location.search).get("step") === "location" ? "location" : "goal",
+  );
   const [goal, setGoal] = useState<Goal | null>(start.onboarded ? start.goal : null);
   const [training, setTraining] = useState<Training | null>(start.onboarded ? start.training : null);
   const [weight, setWeight] = useState(start.weightLb ?? 165);
@@ -70,23 +74,13 @@ export default function OnboardingView() {
     router.replace("/");
   }
 
-  function useMyLocation() {
-    if (!navigator.geolocation) return setLocNote("Location isn't available here. Enter a ZIP instead.");
+  async function locateMe() {
     setLocNote("Asking for location…");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        // Round to ~1 km. We only need the neighborhood, not your exact spot.
-        setLocation({
-          type: "point",
-          lat: Math.round(pos.coords.latitude * 100) / 100,
-          lng: Math.round(pos.coords.longitude * 100) / 100,
-        });
-        setLocNote("Got it. Approximate area saved.");
-        setStep("done");
-      },
-      () => setLocNote("No problem. Enter a ZIP or pick your campus instead."),
-      { enableHighAccuracy: false, timeout: 10000 },
-    );
+    const r = await getCoarsePosition();
+    if (!r.ok) return setLocNote(r.message);
+    setLocation({ type: "point", lat: r.lat, lng: r.lng });
+    setLocNote(null);
+    setStep("done");
   }
 
   if (step === "done") {
@@ -148,7 +142,7 @@ export default function OnboardingView() {
 
       {step === "location" && (
         <div className="space-y-4">
-          <OptionCard title="Use my location" sub="Approximate area only" icon="◎" onClick={useMyLocation} />
+          <OptionCard title="Use my location" sub="Approximate area only" icon="◎" onClick={locateMe} />
           <OptionCard title="Enter ZIP" sub="Find stores near a ZIP code" icon="#" selected={locMode === "zip"} onClick={() => setLocMode("zip")} />
           {locMode === "zip" && (
             <form
@@ -202,7 +196,7 @@ export default function OnboardingView() {
               </div>
             </div>
           )}
-          {locNote && <p className="text-center font-mono text-xs text-muted">{locNote}</p>}
+          {locNote && <p className="glass rounded-2xl px-4 py-3 text-center font-mono text-xs leading-relaxed text-heading">{locNote}</p>}
           <button onClick={() => setStep("done")} className="w-full font-mono text-sm text-muted underline-offset-4 hover:underline">
             Skip for now
           </button>

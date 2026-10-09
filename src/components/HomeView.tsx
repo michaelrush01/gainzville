@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CoachChat } from "@/components/CoachChat";
 import { GridMap } from "@/components/GridMap";
 import { Ring } from "@/components/Ring";
+import { getCoarsePosition } from "@/lib/geo";
 import { locationCenter, locationLabel, type Store } from "@/lib/places";
 import { getProfile, saveProfile, todayTotals } from "@/lib/profile";
 import { supabase, supabaseConfigured } from "@/lib/supabase";
@@ -52,6 +53,22 @@ function Home({ profile: initial }: { profile: Profile }) {
   }, [center]);
 
   const [chatOpen, setChatOpen] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
+
+  async function locateMe() {
+    setLocating(true);
+    setLocError(null);
+    const r = await getCoarsePosition();
+    setLocating(false);
+    if (!r.ok) return setLocError(r.message);
+    const updated = { ...profile, location: { type: "point" as const, lat: r.lat, lng: r.lng } };
+    saveProfile(updated);
+    setLoading(true);
+    setSelected(null);
+    setStores([]);
+    setProfile(updated);
+  }
   const [signedIn, setSignedIn] = useState(false);
   useEffect(() => {
     if (!supabaseConfigured()) return;
@@ -94,7 +111,7 @@ function Home({ profile: initial }: { profile: Profile }) {
         </h1>
         {center && (
           <div className="mt-2 flex gap-2">
-            <Link href="/onboarding" className="glass rounded-full px-3 py-1 font-mono text-[11px] text-heading">
+            <Link href="/onboarding?step=location" className="glass rounded-full px-3 py-1 font-mono text-[11px] text-heading">
               ◎ {locationLabel(profile.location)}
             </Link>
             <button
@@ -113,10 +130,28 @@ function Home({ profile: initial }: { profile: Profile }) {
         ) : (
           <>
             <GridMap />
-            <Link href="/onboarding" className="glass absolute inset-x-8 top-1/3 rounded-3xl p-5 text-center font-mono text-sm text-heading">
+            <Link href="/onboarding?step=location" className="glass absolute inset-x-8 top-1/3 rounded-3xl p-5 text-center font-mono text-sm text-heading">
               Set your location to see stores near you →
             </Link>
           </>
+        )}
+        <button
+          onClick={locateMe}
+          aria-label="Use my location"
+          className="glass absolute bottom-12 right-4 z-10 flex h-11 w-11 items-center justify-center rounded-full font-mono text-lg text-heading"
+        >
+          {locating ? <span className="animate-pulse">…</span> : "◎"}
+        </button>
+        {locError && (
+          <div className="glass absolute inset-x-4 bottom-12 z-20 rounded-2xl p-4 pr-10">
+            <p className="font-mono text-xs leading-relaxed text-heading">{locError}</p>
+            <Link href="/onboarding?step=location" className="mt-2 inline-block font-mono text-xs text-accent underline underline-offset-4">
+              Enter a ZIP instead
+            </Link>
+            <button onClick={() => setLocError(null)} aria-label="Dismiss" className="absolute right-3 top-3 font-mono text-sm text-muted">
+              ✕
+            </button>
+          </div>
         )}
         {loading && (
           <p className="glass absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full px-4 py-1.5 font-mono text-xs text-muted">

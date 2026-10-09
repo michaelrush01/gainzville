@@ -111,7 +111,8 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Pr
     if (stores.length && fittedFor.current !== key) {
       fittedFor.current = key;
       const bounds = new maplibregl.LngLatBounds([center.lng, center.lat], [center.lng, center.lat]);
-      stores.forEach((s) => bounds.extend([s.lng, s.lat]));
+      // Only frame stores near this place (ignores stale results from a previous location)
+      stores.filter((s) => distanceKm(center, s) < 8).forEach((s) => bounds.extend([s.lng, s.lat]));
       m.fitBounds(bounds, { padding: { top: 110, bottom: 40, left: 40, right: 40 }, maxZoom: 15.2, pitch: m.getPitch(), bearing: m.getBearing(), duration: 1200 });
     }
     if (showUser) {
@@ -119,7 +120,7 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Pr
       me.className = "gz-me";
       markers.current.push(new maplibregl.Marker({ element: me }).setLngLat([center.lng, center.lat]).addTo(m));
     }
-  }, [themed, stores, highlightId, showUser, center.lat, center.lng, onSelect]);
+  }, [themed, stores, highlightId, showUser, center, onSelect]);
 
   return (
     <div className="relative h-full w-full">
@@ -158,8 +159,8 @@ function applyTheme(m: MLMap) {
   };
   for (const l of m.getStyle().layers) {
     const id = l.id;
-    // Drop busy layers: POI icons, transit, house numbers
-    if ((l.type === "symbol" && /poi|transit|aerialway|housenumber|shield/.test(id)) || l.type === "hillshade") {
+    // Drop busy or off-theme layers: POI icons, transit, shields, and the light shaded-relief raster
+    if ((l.type === "symbol" && /poi|transit|aerialway|housenumber|shield/.test(id)) || l.type === "hillshade" || l.type === "raster") {
       m.removeLayer(id);
       continue;
     }
@@ -186,4 +187,10 @@ function applyTheme(m: MLMap) {
       set(id, "text-halo-width", 1.2);
     }
   }
+}
+
+function distanceKm(a: LatLng, b: LatLng) {
+  const dLat = (b.lat - a.lat) * 111;
+  const dLng = (b.lng - a.lng) * 111 * Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
 }
