@@ -1,11 +1,16 @@
 import { storeTier, type Store } from "@/lib/places";
 
 // Nearby grocery stores from OpenStreetMap (free, ODbL).
-// Tries the Overpass API first, falls back to Nominatim when Overpass is busy.
-// Results are cached per ~1 km area so we stay polite to both services.
+// Asks two Overpass servers at once and uses whichever answers first (the main one
+// can take 15+ seconds when busy). Falls back to Nominatim if both fail.
+// Results are cached per ~1 km area so we stay polite to these free services.
+
+export const maxDuration = 30;
 
 const UA = "Gainzville/0.1 (student project)";
-const RADIUS_M = 3000;
+const RADIUS_M = 6000; // a short drive: big-box stores like Trader Joe's are rarely right on campus
+const MAX_STORES = 45;
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
 const cache = new Map<string, { at: number; stores: Store[] }>();
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -21,38 +26,55 @@ export async function GET(request: Request) {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < DAY) return Response.json({ stores: hit.stores });
 
-  const stores = (await fromOverpass(lat, lng)) ?? (await fromNominatim(lat, lng)) ?? [];
-  if (stores.length) cache.set(key, { at: Date.now(), stores });
-  return Response.json(
-    { stores },
-    { headers: { "Cache-Control": stores.length ? "public, s-maxage=86400" : "no-store" } },
-  );
+  const stores = (await fromOverpass(lat, lng)) ?? (await fromNominatim(lat, lng));
+  // Every source failed: say so, so the app can offer a retry instead of "no stores"
+  if (!stores) return Response.json({ stores: [], error: "Store data is busy." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  cache.set(key, { at: Date.now(), stores });
+  return Response.json({ stores }, { headers: { "Cache-Control": "public, s-maxage=86400" } });
 }
 
 async function fromOverpass(lat: number, lng: number): Promise<Store[] | null> {
-  const query = `[out:json][timeout:8];nwr["shop"~"^(supermarket|wholesale|greengrocer)$"](around:${RADIUS_M},${lat},${lng});out center 40;`;
-  try {
-    const res = await fetch("https://overpass-api.de/api/interpreter", {
+  const query = `[out:json][timeout:20];nwr["shop"~"^(supermarket|wholesale|greengrocer)$"](around:${RADIUS_M},${lat},${lng});out center tags;`;
+  const ask = async (url: string) => {
+    const res = await fetch(url, {
       method: "POST",
       headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" },
       body: `data=${encodeURIComponent(query)}`,
-      signal: AbortSignal.timeout(9000),
+      signal: AbortSignal.timeout(22000),
     });
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => null);
-    if (!data?.elements) return null;
+    const data = res.ok ? await res.json().catch(() => null) : null;
+    if (!data?.elements) throw new Error("no data");
+    return data.elements as OverpassElement[];
+  };
+  try {
+    const elements = await Promise.any(OVERPASS.map(ask));
     const stores: Store[] = [];
-    for (const el of data.elements) {
+    for (const el of elements) {
       const name = el.tags?.name || el.tags?.brand;
       const pLat = el.lat ?? el.center?.lat;
       const pLng = el.lon ?? el.center?.lon;
-      if (!name || pLat == null) continue;
+      if (!name || pLat == null || pLng == null) continue;
       stores.push({ id: `osm-${el.type}-${el.id}`, name, lat: pLat, lng: pLng, tier: storeTier(name) });
     }
-    return stores.length ? stores : null;
+    return stores.length ? nearest(stores, lat, lng) : null;
   } catch {
     return null;
   }
+}
+
+type OverpassElement = {
+  type: string;
+  id: number;
+  lat?: number;
+  lon?: number;
+  center?: { lat: number; lon: number };
+  tags?: Record<string, string>;
+};
+
+/** Closest first, capped so dense cities don't bury the map in pins. */
+function nearest(stores: Store[], lat: number, lng: number) {
+  const d = (s: Store) => Math.hypot(s.lat - lat, (s.lng - lng) * Math.cos((lat * Math.PI) / 180));
+  return stores.sort((a, b) => d(a) - d(b)).slice(0, MAX_STORES);
 }
 
 async function fromNominatim(lat: number, lng: number): Promise<Store[] | null> {
@@ -81,5 +103,5 @@ async function fromNominatim(lat: number, lng: number): Promise<Store[] | null> 
       /* try the next query */
     }
   }
-  return stores.length ? stores : null;
+  return stores.length ? nearest(stores, lat, lng) : null;
 }

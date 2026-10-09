@@ -21,6 +21,11 @@ const C = {
   roadMajor: "#463870",
   building: "#2a2140",
   text: "#9a90b5",
+  textBright: "#f1eef8",
+  pin: "rgba(29,23,48,0.92)",
+  pinEdge: "rgba(183,156,255,0.45)",
+  accent: "#b79cff",
+  heading: "#e6ddff",
 };
 
 type Props = {
@@ -34,7 +39,6 @@ type Props = {
 export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
-  const markers = useRef<maplibregl.Marker[]>([]);
   const [mode, setMode] = useState<"3d" | "flat">("3d");
   const [failed, setFailed] = useState(false);
   const [themed, setThemed] = useState(false);
@@ -91,36 +95,93 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Pr
     map.current?.easeTo({ pitch: mode === "3d" ? 60 : 0, bearing: mode === "3d" ? -20 : 0, duration: 700 });
   }, [mode]);
 
-  // Store pins (drawn once the themed style has loaded)
+  // Tapping a pin selects that store (kept in a ref so the map's click handler stays current)
+  const selectRef = useRef(onSelect);
+  const storesRef = useRef(stores);
+  useEffect(() => {
+    selectRef.current = onSelect;
+    storesRef.current = stores;
+  }, [onSelect, stores]);
+
+  // Pin layers, added once the themed style has loaded. Drawn by the map itself
+  // so overlapping labels hide automatically and more appear as you zoom in.
+  useEffect(() => {
+    const m = map.current;
+    if (!themed || !m || m.getSource("stores")) return;
+    addPinImages(m);
+    m.addSource("stores", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    m.addLayer({
+      id: "store-pins",
+      type: "symbol",
+      source: "stores",
+      layout: {
+        "text-field": ["get", "name"],
+        "text-font": ["Noto Sans Bold"],
+        "text-size": 11,
+        "icon-image": ["case", ["get", "hot"], "pin-hot", ["==", ["get", "tier"], "budget"], "pin-budget", "pin"],
+        "icon-text-fit": "both",
+        "icon-text-fit-padding": [2, 8, 2, 8],
+        "text-anchor": "bottom",
+        "icon-anchor": "bottom",
+        // Placement priority when labels collide: selected store, then budget stores, then nearest
+        "symbol-sort-key": ["get", "rank"],
+        "text-padding": 4,
+      },
+      paint: {
+        "text-color": ["case", ["any", ["get", "hot"], ["==", ["get", "tier"], "budget"]], C.ground, C.textBright],
+      },
+    });
+    m.on("click", "store-pins", (e) => {
+      const id = e.features?.[0]?.properties?.id;
+      const s = storesRef.current.find((x) => x.id === id);
+      if (s) selectRef.current?.(s);
+    });
+    m.on("mouseenter", "store-pins", () => (m.getCanvas().style.cursor = "pointer"));
+    m.on("mouseleave", "store-pins", () => (m.getCanvas().style.cursor = ""));
+  }, [themed]);
+
+  // Keep pin data in sync with the store list and the selection
   useEffect(() => {
     const m = map.current;
     if (!themed || !m) return;
-    markers.current.forEach((mk) => mk.remove());
-    markers.current = [];
-    for (const s of stores) {
-      const el = document.createElement("button");
-      const hot = s.id === highlightId;
-      el.className = `gz-pin ${s.tier === "budget" ? "gz-pin-budget" : ""} ${hot ? "gz-pin-hot" : ""}`;
-      el.textContent = s.name;
-      el.setAttribute("aria-label", `${s.name}${s.tier === "budget" ? ", budget store" : ""}`);
-      el.onclick = () => onSelect?.(s);
-      markers.current.push(new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([s.lng, s.lat]).addTo(m));
-    }
-    // First time we have stores for this place, frame them all (keeping the 3D tilt)
+    const src = m.getSource("stores") as maplibregl.GeoJSONSource | undefined;
+    src?.setData({
+      type: "FeatureCollection",
+      features: stores.map((s, i) => {
+        const hot = s.id === highlightId;
+        return {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [s.lng, s.lat] },
+          properties: { id: s.id, name: s.name, tier: s.tier ?? "standard", hot, rank: hot ? 0 : (s.tier === "budget" ? 1 : 1000) + i },
+        };
+      }),
+    });
+
+    // First time we have stores for this place, frame the nearby ones (keeping the 3D tilt)
     const key = `${center.lat},${center.lng}`;
     if (stores.length && fittedFor.current !== key) {
       fittedFor.current = key;
       const bounds = new maplibregl.LngLatBounds([center.lng, center.lat], [center.lng, center.lat]);
-      // Only frame stores near this place (ignores stale results from a previous location)
-      stores.filter((s) => distanceKm(center, s) < 8).forEach((s) => bounds.extend([s.lng, s.lat]));
+      // Closest dozen only, so one far-off store doesn't zoom the map way out
+      stores
+        .filter((s) => distanceKm(center, s) < 8)
+        .slice(0, 12)
+        .forEach((s) => bounds.extend([s.lng, s.lat]));
       m.fitBounds(bounds, { padding: { top: 110, bottom: 40, left: 40, right: 40 }, maxZoom: 15.2, pitch: m.getPitch(), bearing: m.getBearing(), duration: 1200 });
     }
-    if (showUser) {
-      const me = document.createElement("div");
-      me.className = "gz-me";
-      markers.current.push(new maplibregl.Marker({ element: me }).setLngLat([center.lng, center.lat]).addTo(m));
-    }
-  }, [themed, stores, highlightId, showUser, center, onSelect]);
+  }, [themed, stores, highlightId, center]);
+
+  // "You are here" dot
+  useEffect(() => {
+    const m = map.current;
+    if (!themed || !m || !showUser) return;
+    const me = document.createElement("div");
+    me.className = "gz-me";
+    const marker = new maplibregl.Marker({ element: me }).setLngLat([center.lng, center.lat]).addTo(m);
+    return () => {
+      marker.remove();
+    };
+  }, [themed, showUser, center]);
 
   return (
     <div className="relative h-full w-full">
@@ -187,6 +248,37 @@ function applyTheme(m: MLMap) {
       set(id, "text-halo-width", 1.2);
     }
   }
+}
+
+/** Stretchable pill backgrounds for the pin labels (the map stretches them to fit each name). */
+function addPinImages(m: MLMap) {
+  const make = (name: string, fill: string, edge: string, edgeWidth: number) => {
+    const r = 12;
+    const size = r * 2 + 2;
+    const ratio = 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = size * ratio;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(ratio, ratio);
+    ctx.beginPath();
+    ctx.roundRect(edgeWidth / 2, edgeWidth / 2, size - edgeWidth, size - edgeWidth, r - edgeWidth / 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.lineWidth = edgeWidth;
+    ctx.strokeStyle = edge;
+    ctx.stroke();
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    m.addImage(name, data, {
+      pixelRatio: ratio,
+      stretchX: [[r * ratio, (r + 2) * ratio]],
+      stretchY: [[r * ratio, (r + 2) * ratio]],
+      content: [r * ratio * 0.5, r * ratio * 0.5, (size - r * 0.5) * ratio, (size - r * 0.5) * ratio],
+    });
+  };
+  make("pin", C.pin, C.pinEdge, 1);
+  make("pin-budget", C.accent, C.accent, 1);
+  make("pin-hot", C.accent, C.heading, 3);
 }
 
 function distanceKm(a: LatLng, b: LatLng) {

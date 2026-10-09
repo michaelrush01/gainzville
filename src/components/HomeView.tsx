@@ -38,19 +38,33 @@ function Home({ profile: initial }: { profile: Profile }) {
   const [budgetOnly, setBudgetOnly] = useState(false);
   const [selected, setSelected] = useState<Store | null>(null);
   const [loading, setLoading] = useState(Boolean(center));
+  const [storeError, setStoreError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!center) return;
     let cancelled = false;
-    fetch(`/api/stores?lat=${center.lat}&lng=${center.lng}`)
-      .then((r) => r.json())
-      .then((d) => !cancelled && setStores(d.stores ?? []))
-      .catch(() => {})
+    // Free map data servers are sometimes slow or busy, so try twice before giving up
+    const get = () => fetch(`/api/stores?lat=${center.lat}&lng=${center.lng}`).then((r) => r.json());
+    get()
+      .then((d) => (d.stores?.length ? d : get()))
+      .then((d) => {
+        if (cancelled) return;
+        setStores(d.stores ?? []);
+        setStoreError(Boolean(d.error) || !d.stores);
+      })
+      .catch(() => !cancelled && setStoreError(true))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [center]);
+  }, [center, attempt]);
+
+  function retryStores() {
+    setStoreError(false);
+    setLoading(true);
+    setAttempt((a) => a + 1);
+  }
 
   const [chatOpen, setChatOpen] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -65,10 +79,37 @@ function Home({ profile: initial }: { profile: Profile }) {
     const updated = { ...profile, location: { type: "point" as const, lat: r.lat, lng: r.lng } };
     saveProfile(updated);
     setLoading(true);
+    setStoreError(false);
     setSelected(null);
     setStores([]);
     setProfile(updated);
   }
+  // If the user already allowed location, quietly refresh it on open so the map
+  // follows them (e.g. home for the weekend) without pressing ◎. ZIP/campus picks are left alone.
+  useEffect(() => {
+    if (initial.location?.type !== "point" || !navigator.permissions) return;
+    let cancelled = false;
+    navigator.permissions
+      .query({ name: "geolocation" })
+      .then(async (perm) => {
+        if (perm.state !== "granted") return;
+        const r = await getCoarsePosition();
+        const prev = initial.location;
+        if (cancelled || !r.ok || prev?.type !== "point") return;
+        if (Math.abs(r.lat - prev.lat) < 0.005 && Math.abs(r.lng - prev.lng) < 0.005) return;
+        const updated = { ...initial, location: { type: "point" as const, lat: r.lat, lng: r.lng } };
+        saveProfile(updated);
+        setSelected(null);
+        setStores([]);
+        setLoading(true);
+        setProfile(updated);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [initial]);
+
   const [signedIn, setSignedIn] = useState(false);
   useEffect(() => {
     if (!supabaseConfigured()) return;
@@ -158,7 +199,15 @@ function Home({ profile: initial }: { profile: Profile }) {
             Finding stores near you…
           </p>
         )}
-        {!loading && center && stores.length === 0 && (
+        {!loading && center && storeError && (
+          <button
+            onClick={retryStores}
+            className="glass absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full px-4 py-1.5 font-mono text-xs text-heading"
+          >
+            Couldn&apos;t load stores · <span className="text-accent underline underline-offset-4">Try again</span>
+          </button>
+        )}
+        {!loading && center && !storeError && stores.length === 0 && (
           <p className="glass absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full px-4 py-1.5 font-mono text-xs text-muted">
             No grocery stores found nearby yet
           </p>

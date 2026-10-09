@@ -69,30 +69,6 @@ body {
 }
 
 /* Map store pins */
-.gz-pin {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(29, 23, 48, 0.85);
-  border: 1px solid rgba(183, 156, 255, 0.35);
-  color: var(--text);
-  font: 700 11px var(--font-space-mono), monospace;
-  white-space: nowrap;
-  cursor: pointer;
-  backdrop-filter: blur(6px);
-}
-.maplibregl-marker:has(.gz-pin-budget),
-.gz-pin-budget {
-  z-index: 2;
-}
-.gz-pin-budget {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-color: var(--accent);
-}
-.gz-pin-hot {
-  box-shadow: 0 0 0 3px var(--heading), 0 0 24px var(--accent);
-  transform: scale(1.15);
-}
 .gz-me {
   width: 16px;
   height: 16px;
