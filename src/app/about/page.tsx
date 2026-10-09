@@ -26,8 +26,12 @@ export default function About() {
       <div className="glass mt-4 space-y-2 rounded-3xl p-6 font-mono text-sm text-muted">
         <p className="font-bold text-heading">Private by design</p>
         <p>Meal photos are analyzed and not saved.</p>
-        <p>Your goal and today&apos;s log stay in this browser for now.</p>
+        <p>Without an account, your plan and log stay in this browser. With one, they sync to your account.</p>
         <p>Not medical advice. Talk to a doctor or dietitian for medical needs.</p>
+        <p className="flex gap-4 pt-2">
+          <Link href="/privacy" className="underline underline-offset-4">Privacy</Link>
+          <Link href="/terms" className="underline underline-offset-4">Terms</Link>
+        </p>
       </div>
     </main>
   );

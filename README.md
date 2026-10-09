@@ -25,7 +25,7 @@ Calorie apps track what you ate. None of them answer "what's the cheapest way to
 | **Coach** | A chatbot that reads the user's plan, today's totals, and nearby stores on every message. It answers recipe, store, and lifting-nutrition questions, can change the plan (only after the user taps Confirm), and points the map at the store it recommends. |
 | **Onboarding** | A five-step "choose your path" flow (goal, training, stats, budget, location) that sets starting protein and calorie targets. |
 | **Installable** | Add to Home Screen on iPhone or Android and it opens full screen like an app, with its own icon. |
-| **Accounts** | Passwordless email sign-in. The plan and food log sync across devices. "Delete my account" removes everything. |
+| **Accounts** | "Continue with Google" or a passwordless email link. The plan and food log sync across devices. "Delete my account" removes everything. |
 
 ## Architecture
 
