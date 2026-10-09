@@ -1,3 +1,5 @@
+<img src="public/logo.svg" width="96" alt="Gainzville logo: a jacked gator biting a dumbbell" />
+
 # Gainzville
 
 **Smart protein on a student budget.** Scan a meal, a barcode, or the front of a package, see the protein and what it cost you, and find the best-value protein near campus on a 3D map.
@@ -22,6 +24,7 @@ Calorie apps track what you ate. None of them answer "what's the cheapest way to
 | **3D store map** | A real 3D map of wherever the user is (their location, a ZIP, or one of 25 campuses), with nearby grocery stores as pins. Budget chains are highlighted, and a filter shows budget stores only. |
 | **Coach** | A chatbot that reads the user's plan, today's totals, and nearby stores on every message. It answers recipe, store, and lifting-nutrition questions, can change the plan (only after the user taps Confirm), and points the map at the store it recommends. |
 | **Onboarding** | A five-step "choose your path" flow (goal, training, stats, budget, location) that sets starting protein and calorie targets. |
+| **Installable** | Add to Home Screen on iPhone or Android and it opens full screen like an app, with its own icon. |
 | **Accounts** | Passwordless email sign-in. The plan and food log sync across devices. "Delete my account" removes everything. |
 
 ## Architecture
@@ -100,7 +103,6 @@ You'll need an Anthropic API key and a Supabase project (run `supabase/schema.sq
 
 - Pilot with lifters at UF and collect feedback
 - User-submitted prices for real local protein-per-dollar numbers
-- Install to home screen (PWA)
 - Paid tier with unlimited scans
 
 ## Data sources and credits

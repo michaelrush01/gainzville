@@ -23,12 +23,15 @@ const sora = Sora({
 export const metadata: Metadata = {
   title: "Gainzville",
   description: "Smart protein on a student budget. Scan a meal, see the protein and what it cost you.",
+  // Full-screen when added to an iPhone home screen
+  appleWebApp: { capable: true, title: "Gainzville", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {
   themeColor: "#120e1f",
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

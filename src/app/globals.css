@@ -109,3 +109,11 @@ body {
 .maplibregl-ctrl-attrib a {
   color: var(--muted) !important;
 }
+
+/* Installed to an iPhone home screen, the app draws under the notch and home bar.
+   A ground-colored border of the safe-area size keeps content clear of them without
+   touching each page's own padding (borders sit inside the box with border-box sizing). */
+main {
+  border-top: env(safe-area-inset-top, 0px) solid var(--ground);
+  border-bottom: env(safe-area-inset-bottom, 0px) solid var(--ground);
+}
