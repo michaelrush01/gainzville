@@ -57,3 +57,14 @@ export function proteinPerDollar(protein: number, cost: number | null) {
   if (!cost || cost <= 0) return null;
   return Math.round((protein / cost) * 10) / 10;
 }
+
+/** A deal from a chain's weekly ad or a restaurant promo (see lib/deals.ts) */
+export type Deal = {
+  chain: string;
+  item: string;
+  deal: string;
+  price_usd: number | null;
+  protein_g: number | null;
+  valid_to: string;
+  source_url: string | null;
+};

@@ -32,13 +32,15 @@ type Props = {
   today: { protein: number; calories: number; spent: number };
   stores: Store[];
   place: string | null;
+  /** Map center, so the server can look up this area's deals */
+  center: { lat: number; lng: number } | null;
   onApplyPlan: (change: PlanChange) => void;
   onHighlight: (ids: string[]) => void;
   onOpenChange?: (open: boolean) => void;
 };
 
 /** The chat bar plus the coach conversation that opens above it. */
-export function CoachChat({ profile, today, stores, place, onApplyPlan, onHighlight, onOpenChange }: Props) {
+export function CoachChat({ profile, today, stores, place, center, onApplyPlan, onHighlight, onOpenChange }: Props) {
   const [messages, setMessages] = useState<Msg[]>(loadHistory);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -76,6 +78,7 @@ export function CoachChat({ profile, today, stores, place, onApplyPlan, onHighli
           today,
           stores: stores.map(({ id, name, tier, kind, chain }) => ({ id, name, tier, kind, chain })),
           place,
+          center,
         }),
       });
       const data = await res.json();

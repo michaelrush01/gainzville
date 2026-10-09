@@ -15,7 +15,8 @@ const LIMITS: Record<Feature, { guest: number; user: number; global: number }> =
 };
 
 let admin: SupabaseClient | null = null;
-function adminClient() {
+/** Server-side database client with full access (secret key). Never sent to browsers. */
+export function adminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const secret = process.env.SUPABASE_SECRET_KEY;
   if (!url || !secret) return null;

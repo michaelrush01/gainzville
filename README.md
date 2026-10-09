@@ -22,6 +22,8 @@ Calorie apps track what you ate. None of them answer "what's the cheapest way to
 | **Package photos** | The AI reads the brand and flavor off the front of a package, then the app finds that exact product in the food database (brand must match, US products preferred) so the numbers are real, not guessed. |
 | **Honest labels** | Barcode, label, and matched-product results are marked **Verified**. Meal photos are marked **Estimate**, with a "Fix portions" box that re-estimates from text ("that's turkey, double rice") instead of another photo. |
 | **3D store map** | A real 3D map of wherever the user is (their location, a ZIP, or one of 25 campuses), with nearby grocery stores as pins. Budget chains are highlighted, and a filter shows budget stores only. |
+| **Restaurants** | Protein-friendly chains (Chipotle, Chick-fil-A, CAVA, Panda Express and more) show as their own pins, each with a best protein order and its grams of protein per dollar. |
+| **Weekly deals** | A background job uses Claude with web search to read each nearby chain's public weekly ad and save the protein deals (BOGO chicken, cheap Greek yogurt) with sources and end dates. Pins show "Publix · 3 deals", and the coach recommends them. |
 | **Coach** | A chatbot that reads the user's plan, today's totals, and nearby stores on every message. It answers recipe, store, and lifting-nutrition questions, can change the plan (only after the user taps Confirm), and points the map at the store it recommends. |
 | **Onboarding** | A five-step "choose your path" flow (goal, training, stats, budget, location) that sets starting protein and calorie targets. |
 | **Installable** | Add to Home Screen on iPhone or Android and it opens full screen like an app, with its own icon. |
@@ -75,6 +77,7 @@ flowchart LR
 - **The model suggests, the user decides.** The coach can *propose* a plan change, but nothing changes until the user taps Confirm. The server also enforces a calorie floor (1,500 kcal, 1,800 for under-18s) no matter what the model asks for.
 - **Local first.** The app reads from a copy in the browser, so it's fast and works offline. Signed-in users also get every change written to Supabase.
 - **Security in the database, not just the app.** Row level security means each user can only read or write their own rows, enforced by Postgres even if the app has a bug. API keys live only on the server.
+- **Deals cost per area, not per user.** Deals are researched once per area (a ~50 km grid cell, since weekly ads are regional) and saved. A refresh only runs when the current deals are about to expire, which is when the new weekly ad comes out, or every 3 days at most. A database lock stops two visitors from triggering the same paid search, and a daily cap limits spend.
 - **Free, open data where possible.** Maps, store locations, and food data all come from open sources with no paid API keys.
 
 ### Safety and privacy
@@ -97,11 +100,12 @@ cp .env.example .env.local   # then add your keys
 npm run dev
 ```
 
-You'll need an Anthropic API key and a Supabase project (run `supabase/schema.sql` in its SQL editor).
+You'll need an Anthropic API key and a Supabase project (run the files in `supabase/` in its SQL editor).
 
 ## Roadmap
 
 - Pilot with lifters at UF and collect feedback
+- Moderated campus deals board (anonymous student posts, upvotes, expiry)
 - User-submitted prices for real local protein-per-dollar numbers
 - Paid tier with unlimited scans
 

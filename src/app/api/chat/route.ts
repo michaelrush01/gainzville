@@ -3,6 +3,7 @@ import { aiConfigured, chatReply, type ChatTurn } from "@/lib/ai";
 import { COACH_RULES } from "@/lib/coach";
 import { limitMessage, takeQuota } from "@/lib/quota";
 import type { Store } from "@/lib/places";
+import { areaFor, readDeals } from "@/lib/deals";
 import { chainByKey, type Chain } from "@/lib/restaurants";
 import type { Profile } from "@/lib/types";
 
@@ -43,6 +44,7 @@ type Body = {
   today: { protein: number; calories: number; spent: number };
   stores: Pick<Store, "id" | "name" | "tier" | "kind" | "chain">[];
   place: string | null;
+  center?: { lat: number; lng: number } | null;
 };
 
 export async function POST(request: Request) {
@@ -75,6 +77,9 @@ export async function POST(request: Request) {
     .map((s) => ({ id: s.id, chain: chainByKey(s.chain) }))
     .filter((r): r is { id: string; chain: Chain } => Boolean(r.chain))
     .slice(0, 10);
+  // This week's deals come from our database for the user's area, never from the request
+  const c = body.center;
+  const deals = c && Number.isFinite(c.lat) && Number.isFinite(c.lng) ? (await readDeals(areaFor(c.lat, c.lng))).slice(0, 12) : [];
   const context = `USER PLAN
 Goal: ${p.goal}. Training: ${p.training}. Weight: ${p.weightLb ?? "not given"} lb. Age: ${p.age ?? "not given"}.
 Targets: ${p.proteinTarget} g protein, ${p.calorieTarget} kcal per day. Budget: $${p.weeklyBudget}/week.
@@ -83,7 +88,9 @@ Location: ${body.place ?? "not set"}.
 NEARBY STORES (id | name | price tier)
 ${stores.length ? stores.map((s) => `${s.id} | ${s.name} | ${s.tier}`).join("\n") : "none loaded"}
 NEARBY RESTAURANTS (id | chain | best protein order | approx protein, kcal, price)
-${food.length ? food.map(({ id, chain: c }) => `${id} | ${c.name} | ${c.order} | ~${c.protein} g, ${c.calories} kcal, ~$${c.price}`).join("\n") : "none loaded"}`;
+${food.length ? food.map(({ id, chain: c }) => `${id} | ${c.name} | ${c.order} | ~${c.protein} g, ${c.calories} kcal, ~$${c.price}`).join("\n") : "none loaded"}
+THIS WEEK'S DEALS NEAR THE USER (chain | item | deal | price | approx protein | ends)
+${deals.length ? deals.map((d) => `${d.chain} | ${d.item} | ${d.deal} | ${d.price_usd != null ? `$${d.price_usd}` : "?"} | ${d.protein_g != null ? `${Math.round(d.protein_g)} g` : "?"} | ${d.valid_to}`).join("\n") : "none found yet"}`;
 
   try {
     const { text, toolCalls } = await chatReply({

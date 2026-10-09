@@ -35,9 +35,11 @@ type Props = {
   showUser: boolean;
   highlightId?: string | null;
   onSelect?: (s: Store) => void;
+  /** Store id -> number of deals this week, shown on the pin */
+  dealCounts?: Record<string, number>;
 };
 
-export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Props) {
+export function StoreMap({ center, stores, showUser, highlightId, onSelect, dealCounts }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const [mode, setMode] = useState<"3d" | "flat">("3d");
@@ -116,7 +118,7 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Pr
       type: "symbol",
       source: "stores",
       layout: {
-        "text-field": ["get", "name"],
+        "text-field": ["get", "label"],
         "text-font": ["Noto Sans Bold"],
         "text-size": 11,
         "icon-image": ["case", ["get", "hot"], "pin-hot", ["==", ["get", "kind"], "food"], "pin-food", ["==", ["get", "tier"], "budget"], "pin-budget", "pin"],
@@ -153,7 +155,7 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Pr
         return {
           type: "Feature",
           geometry: { type: "Point", coordinates: [s.lng, s.lat] },
-          properties: { id: s.id, name: s.name, tier: s.tier ?? "standard", kind: s.kind ?? "grocery", hot, rank: hot ? 0 : (s.tier === "budget" ? 1 : s.kind === "food" ? 500 : 1000) + i },
+          properties: { id: s.id, name: s.name, label: dealCounts?.[s.id] ? `${s.name} · ${dealCounts[s.id]} deal${dealCounts[s.id] > 1 ? "s" : ""}` : s.name, tier: s.tier ?? "standard", kind: s.kind ?? "grocery", hot, rank: hot ? 0 : (s.tier === "budget" ? 1 : s.kind === "food" ? 500 : 1000) + i },
         };
       }),
     });
@@ -170,7 +172,7 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect }: Pr
         .forEach((s) => bounds.extend([s.lng, s.lat]));
       m.fitBounds(bounds, { padding: { top: 110, bottom: 40, left: 40, right: 40 }, maxZoom: 15.2, pitch: m.getPitch(), bearing: m.getBearing(), duration: 1200 });
     }
-  }, [themed, stores, highlightId, center]);
+  }, [themed, stores, highlightId, center, dealCounts]);
 
   // "You are here" dot
   useEffect(() => {
