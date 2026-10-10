@@ -15,6 +15,17 @@ type Post = {
   expiresAt: string;
   mine: boolean;
   myVote: -1 | 0 | 1;
+  replies: number;
+};
+
+type Reply = {
+  id: number;
+  body: string;
+  score: number;
+  createdAt: string;
+  author: string;
+  mine: boolean;
+  myVote: -1 | 0 | 1;
 };
 
 function ago(iso: string) {
@@ -40,6 +51,7 @@ export function BoardView({ center }: { center: { lat: number; lng: number } }) 
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
+  const [openThread, setOpenThread] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/board?lat=${center.lat}&lng=${center.lng}&sort=${sort}`, { headers: await authHeaders() });
@@ -190,9 +202,14 @@ export function BoardView({ center }: { center: { lat: number; lng: number } }) 
                   {ago(p.createdAt)} · {endsIn(p.expiresAt)}
                   {p.mine && " · you"}
                 </p>
-                <button onClick={() => setMenuFor(menuFor === p.id ? null : p.id)} aria-label="More" className="mt-1 font-mono text-xs text-muted">
-                  •••
-                </button>
+                <div className="mt-1 flex gap-4 font-mono text-xs text-muted">
+                  <button onClick={() => setOpenThread(openThread === p.id ? null : p.id)} className={openThread === p.id ? "text-accent" : ""}>
+                    {p.replies ? `${p.replies} repl${p.replies === 1 ? "y" : "ies"}` : "Reply"}
+                  </button>
+                  <button onClick={() => setMenuFor(menuFor === p.id ? null : p.id)} aria-label="More">
+                    •••
+                  </button>
+                </div>
                 {menuFor === p.id && (
                   <div className="mt-1 flex gap-4 font-mono text-[11px]">
                     {p.mine ? (
@@ -205,6 +222,13 @@ export function BoardView({ center }: { center: { lat: number; lng: number } }) 
                       </button>
                     )}
                   </div>
+                )}
+                {openThread === p.id && (
+                  <Thread
+                    postId={p.id}
+                    signedIn={signedIn}
+                    onCount={(n) => setPosts((ps) => ps?.map((x) => (x.id === p.id ? { ...x, replies: n } : x)) ?? null)}
+                  />
                 )}
               </div>
               <div className="flex flex-col items-center font-mono text-sm">
@@ -231,6 +255,122 @@ export function BoardView({ center }: { center: { lat: number; lng: number } }) 
       <p className="mt-4 font-mono text-[10px] leading-relaxed text-muted">
         Posts are anonymous but tied to your account. No names, contact info, or harassment. Posts hide at −5 or after two reports.
       </p>
+    </div>
+  );
+}
+
+/** Replies under one post. OP is the original poster; everyone else is Anon 1, Anon 2… in this thread. */
+function Thread({ postId, signedIn, onCount }: { postId: number; signedIn: boolean; onCount: (n: number) => void }) {
+  const [replies, setReplies] = useState<Reply[] | null>(null);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const res = await fetch(`/api/board/replies?post=${postId}`, { headers: await authHeaders() });
+    const d = await res.json().catch(() => null);
+    const list: Reply[] = d?.replies ?? [];
+    setReplies(list);
+    onCount(list.length);
+  }, [postId, onCount]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await fetch(`/api/board/replies?post=${postId}`, { headers: await authHeaders() });
+      const d = await res.json().catch(() => null);
+      if (!cancelled) setReplies(d?.replies ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [postId]);
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setNote(null);
+    const res = await fetch("/api/board/replies", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+      body: JSON.stringify({ post: postId, body: text }),
+    });
+    const d = await res.json().catch(() => null);
+    setBusy(false);
+    if (!res.ok) return setNote(d?.error ?? "Couldn't reply.");
+    setText("");
+    load();
+  }
+
+  async function act(r: Reply, action: "up" | "down" | "clear" | "report" | "delete") {
+    if (!signedIn) return setNote("Sign in to vote or report.");
+    if (action === "up" || action === "down" || action === "clear") {
+      const value = action === "up" ? 1 : action === "down" ? -1 : 0;
+      setReplies((rs) => rs?.map((x) => (x.id === r.id ? { ...x, myVote: value, score: x.score - x.myVote + value } : x)) ?? null);
+    } else {
+      setReplies((rs) => rs?.filter((x) => x.id !== r.id) ?? null);
+    }
+    const res = await fetch("/api/board/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+      body: JSON.stringify({ id: r.id, kind: "reply", action }),
+    });
+    if (!res.ok) load();
+    if (action === "report") setNote("Thanks. Reported replies are hidden after two reports.");
+  }
+
+  return (
+    <div className="mt-3 space-y-2 border-l border-white/10 pl-3">
+      {replies === null && <p className="font-mono text-[11px] text-muted">Loading…</p>}
+      {replies?.map((r) => (
+        <div key={r.id} className="flex gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-[10px]">
+              <span className={r.author === "OP" ? "font-bold text-accent" : "text-heading"}>{r.author}</span>
+              <span className="text-muted">
+                {" "}
+                · {ago(r.createdAt)}
+                {r.mine && " · you"}
+              </span>
+            </p>
+            <p className="break-words font-body text-[13px] text-text">{r.body}</p>
+            <button onClick={() => act(r, r.mine ? "delete" : "report")} className="font-mono text-[10px] text-muted">
+              {r.mine ? "Delete" : "Report"}
+            </button>
+          </div>
+          <div className="flex flex-col items-center font-mono text-[11px]">
+            <button onClick={() => act(r, r.myVote === 1 ? "clear" : "up")} aria-label="Upvote reply" className={r.myVote === 1 ? "text-accent" : "text-muted"}>
+              ▲
+            </button>
+            <span className="text-heading">{r.score}</span>
+            <button
+              onClick={() => act(r, r.myVote === -1 ? "clear" : "down")}
+              aria-label="Downvote reply"
+              className={r.myVote === -1 ? "text-[#ff7a9a]" : "text-muted"}
+            >
+              ▼
+            </button>
+          </div>
+        </div>
+      ))}
+      {signedIn ? (
+        <form onSubmit={send} className="flex gap-2 pt-1">
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value.slice(0, 280))}
+            placeholder="Reply anonymously…"
+            className="min-w-0 flex-1 rounded-full bg-white/5 px-3 py-2 font-body text-xs text-text placeholder:text-muted focus:outline-none"
+          />
+          <button disabled={busy || !text.trim()} className="rounded-full bg-accent px-3 py-2 font-mono text-[11px] font-bold text-on-accent disabled:opacity-40">
+            {busy ? "…" : "Send"}
+          </button>
+        </form>
+      ) : (
+        <Link href="/account" className="font-mono text-[11px] text-accent underline underline-offset-4">
+          Sign in to reply
+        </Link>
+      )}
+      {note && <p className="font-mono text-[10px] text-accent">{note}</p>}
     </div>
   );
 }

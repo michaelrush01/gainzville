@@ -18,8 +18,19 @@ type AdminPost = {
   board_reports?: { reason: string | null }[];
 };
 
+type AdminReply = {
+  id: number;
+  post_id: number;
+  body: string;
+  score: number;
+  reports: number;
+  hidden: boolean;
+  created_at: string;
+  board_reply_reports?: { reason: string | null }[];
+};
+
 export default function AdminView() {
-  const [data, setData] = useState<{ flagged: AdminPost[]; recent: AdminPost[] } | null>(null);
+  const [data, setData] = useState<{ flagged: AdminPost[]; recent: AdminPost[]; flaggedReplies: AdminReply[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -43,12 +54,12 @@ export default function AdminView() {
     };
   }, []);
 
-  async function act(id: number, action: "restore" | "remove" | "ban") {
-    if (action === "ban" && !confirm("Ban this poster from the board and remove all their posts?")) return;
+  async function act(id: number, action: "restore" | "remove" | "ban", kind: "post" | "reply" = "post") {
+    if (action === "ban" && !confirm("Ban this person from the board and remove everything they posted?")) return;
     await fetch("/api/board/admin", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-      body: JSON.stringify({ id, action }),
+      body: JSON.stringify({ id, kind, action }),
     });
     load();
   }
@@ -100,6 +111,39 @@ export default function AdminView() {
       {data && (
         <>
           {list("REPORTED OR HIDDEN", data.flagged)}
+          <section className="mt-8">
+            <p className="font-mono text-sm tracking-[0.2em] text-accent">REPORTED OR HIDDEN REPLIES</p>
+            {data.flaggedReplies.length === 0 && <p className="mt-3 font-mono text-xs text-muted">Nothing here.</p>}
+            <ul className="mt-3 space-y-3">
+              {data.flaggedReplies.map((r) => (
+                <li key={r.id} className="glass rounded-2xl p-4">
+                  <p className="font-body text-sm text-text">{r.body}</p>
+                  <p className="mt-1 font-mono text-[11px] text-muted">
+                    on post {r.post_id} · score {r.score} · {r.reports} report{r.reports === 1 ? "" : "s"}
+                    {r.hidden && " · HIDDEN"} · {new Date(r.created_at).toLocaleString()}
+                  </p>
+                  {r.board_reply_reports?.some((x) => x.reason) && (
+                    <p className="mt-1 font-mono text-[11px] text-heading">
+                      Reasons: {r.board_reply_reports.map((x) => x.reason).filter(Boolean).join("; ")}
+                    </p>
+                  )}
+                  <div className="mt-3 flex gap-3 font-mono text-xs">
+                    {r.hidden && (
+                      <button onClick={() => act(r.id, "restore", "reply")} className="rounded-full bg-accent px-3 py-1 font-bold text-on-accent">
+                        Restore
+                      </button>
+                    )}
+                    <button onClick={() => act(r.id, "remove", "reply")} className="glass rounded-full px-3 py-1 text-text">
+                      Remove
+                    </button>
+                    <button onClick={() => act(r.id, "ban", "reply")} className="rounded-full bg-[#ff7a9a] px-3 py-1 font-bold text-on-accent">
+                      Ban poster
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
           {list("RECENT POSTS", data.recent)}
         </>
       )}

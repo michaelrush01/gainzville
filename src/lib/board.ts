@@ -15,6 +15,18 @@ export type BoardPost = {
   expiresAt: string;
   mine: boolean;
   myVote: -1 | 0 | 1;
+  replies: number;
+};
+
+export type BoardReply = {
+  id: number;
+  body: string;
+  score: number;
+  createdAt: string;
+  /** "OP" for the original poster, otherwise "Anon 1", "Anon 2"... in order of first reply */
+  author: string;
+  mine: boolean;
+  myVote: -1 | 0 | 1;
 };
 
 type Row = {
@@ -29,7 +41,7 @@ type Row = {
 
 const COLUMNS = "id,user_id,body,place,score,created_at,expires_at";
 
-function toPost(r: Row, userId: string | null, votes: Map<number, number>): BoardPost {
+function toPost(r: Row, userId: string | null, votes: Map<number, number>, replies: Map<number, number>): BoardPost {
   return {
     id: r.id,
     body: r.body,
@@ -39,6 +51,7 @@ function toPost(r: Row, userId: string | null, votes: Map<number, number>): Boar
     expiresAt: r.expires_at,
     mine: r.user_id === userId,
     myVote: (votes.get(r.id) ?? 0) as BoardPost["myVote"],
+    replies: replies.get(r.id) ?? 0,
   };
 }
 
@@ -70,8 +83,68 @@ export async function listPosts(area: string, sort: "hot" | "new", userId: strin
       .in("post_id", rows.map((r) => r.id));
     for (const v of mine ?? []) votes.set(v.post_id, v.value);
   }
-  const posts = rows.map((r) => toPost(r, userId, votes));
+  const replies = new Map<number, number>();
+  if (rows.length) {
+    const { data: rs } = await db
+      .from("board_replies")
+      .select("post_id")
+      .in("post_id", rows.map((r) => r.id))
+      .eq("hidden", false)
+      .eq("removed", false);
+    for (const r of rs ?? []) replies.set(r.post_id, (replies.get(r.post_id) ?? 0) + 1);
+  }
+  const posts = rows.map((r) => toPost(r, userId, votes, replies));
   return sort === "hot" ? posts.sort((a, b) => hotness(b) - hotness(a)) : posts;
+}
+
+/** A post that can be replied to: visible and not expired. Returns its author for the OP label. */
+export async function livePost(postId: number) {
+  const db = adminClient();
+  if (!db) return null;
+  const { data } = await db
+    .from("board_posts")
+    .select("id,user_id")
+    .eq("id", postId)
+    .eq("hidden", false)
+    .eq("removed", false)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  return data as { id: number; user_id: string } | null;
+}
+
+export async function listReplies(postId: number, userId: string | null): Promise<BoardReply[] | null> {
+  const db = adminClient();
+  const post = await livePost(postId);
+  if (!db || !post) return null;
+  const { data } = await db
+    .from("board_replies")
+    .select("id,user_id,body,score,hidden,removed,created_at")
+    .eq("post_id", postId)
+    .order("created_at", { ascending: true })
+    .limit(200);
+  const rows = data ?? [];
+  // Stable per-thread names, counted over every reply (even hidden ones) so labels never shift
+  const names = new Map<string, string>([[post.user_id, "OP"]]);
+  for (const r of rows) if (!names.has(r.user_id)) names.set(r.user_id, `Anon ${names.size}`);
+  const visible = rows.filter((r) => !r.hidden && !r.removed);
+  const votes = new Map<number, number>();
+  if (userId && visible.length) {
+    const { data: mine } = await db
+      .from("board_reply_votes")
+      .select("reply_id,value")
+      .eq("user_id", userId)
+      .in("reply_id", visible.map((r) => r.id));
+    for (const v of mine ?? []) votes.set(v.reply_id, v.value);
+  }
+  return visible.map((r) => ({
+    id: r.id,
+    body: r.body,
+    score: r.score,
+    createdAt: r.created_at,
+    author: names.get(r.user_id) ?? "Anon",
+    mine: r.user_id === userId,
+    myVote: (votes.get(r.id) ?? 0) as BoardReply["myVote"],
+  }));
 }
 
 export async function isBanned(email: string | null) {
@@ -97,7 +170,7 @@ const PERSONAL = [
 ];
 
 /** Cheap checks first, then a quick AI review for harassment, hate, or off-topic posts. */
-export async function screenPost(body: string, place: string | null): Promise<{ ok: true } | { ok: false; reason: string }> {
+export async function screenPost(body: string, place: string | null, replyTo?: string): Promise<{ ok: true } | { ok: false; reason: string }> {
   const text = `${body} ${place ?? ""}`;
   if (PERSONAL.some((re) => re.test(text))) {
     return { ok: false, reason: "Posts can't include phone numbers, emails, @handles, or payment apps. Keep it anonymous." };
@@ -108,10 +181,10 @@ export async function screenPost(body: string, place: string | null): Promise<{ 
       model: "chat",
       maxTokens: 200,
       system: `You moderate an anonymous board where college students share food deals and cheap protein tips near campus.
-Allow: deals, promos, prices, free food events, store or restaurant tips, questions about where to find cheap protein, mild opinions about food places.
+Allow: deals, promos, prices, free food events, store or restaurant tips, questions about where to find cheap protein, mild opinions about food places. Replies can also be short reactions ("thanks", "still going on?", "it ended") or friendly follow-up questions.
 Block: harassment or naming/targeting specific people, hate, threats, sexual content, drugs or alcohol sales, personal info, scams or spam links, anything unrelated to food, groceries, eating, or fitness nutrition.
 Return allowed=false with a short, friendly reason (under 20 words) if it should be blocked.`,
-      prompt: `Post: ${body}\nPlace tag: ${place ?? "(none)"}`,
+      prompt: replyTo ? `Reply: ${body}\nReplying to this post: ${replyTo}` : `Post: ${body}\nPlace tag: ${place ?? "(none)"}`,
       schema: {
         type: "object",
         additionalProperties: false,
