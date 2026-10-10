@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { BoardView } from "@/components/BoardView";
 import type { Deal } from "@/lib/types";
 
 // This week's protein deals near the user, best protein per dollar first.
@@ -39,27 +41,44 @@ export function DealLine({ d, showChain = true }: { d: Deal; showChain?: boolean
   );
 }
 
-export function DealsPanel({ deals, onClose }: { deals: Deal[]; onClose: () => void }) {
+export function DealsPanel({ deals, center, onClose }: { deals: Deal[]; center: { lat: number; lng: number }; onClose: () => void }) {
+  const [tab, setTab] = useState<"ads" | "board">(deals.length ? "ads" : "board");
   return (
-    <div className="glass relative max-h-[42dvh] overflow-y-auto rounded-3xl px-5 py-4">
+    <div className="glass relative max-h-[55dvh] overflow-y-auto rounded-3xl px-5 py-4">
       <div className="mb-3 flex items-center justify-between">
-        <p className="font-mono text-xs tracking-[0.2em] text-accent">THIS WEEK&apos;S PROTEIN DEALS</p>
+        <div className="flex gap-4 font-mono text-xs tracking-[0.15em]">
+          {(["ads", "board"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={tab === t ? "font-bold text-accent underline decoration-2 underline-offset-8" : "text-muted"}
+            >
+              {t === "ads" ? `WEEKLY ADS${deals.length ? ` · ${deals.length}` : ""}` : "CAMPUS BOARD"}
+            </button>
+          ))}
+        </div>
         <button onClick={onClose} aria-label="Close deals" className="font-mono text-sm text-muted">
           ✕
         </button>
       </div>
-      {deals.length ? (
-        <ul className="space-y-3">
-          {deals.map((d, i) => (
-            <DealLine key={`${d.chain}-${d.item}-${i}`} d={d} />
-          ))}
-        </ul>
+      {tab === "board" ? (
+        <BoardView center={center} />
       ) : (
-        <p className="font-mono text-xs text-muted">Checking this week&apos;s ads near you. Deals show up within a few minutes.</p>
+        <>
+          {deals.length ? (
+            <ul className="space-y-3">
+              {deals.map((d, i) => (
+                <DealLine key={`${d.chain}-${d.item}-${i}`} d={d} />
+              ))}
+            </ul>
+          ) : (
+            <p className="font-mono text-xs text-muted">Checking this week&apos;s ads near you. Deals show up within a few minutes.</p>
+          )}
+          <p className="mt-4 font-mono text-[10px] leading-relaxed text-muted">
+            Found by AI from public weekly ads, checked daily. Prices can vary by store, so confirm in store.
+          </p>
+        </>
       )}
-      <p className="mt-4 font-mono text-[10px] leading-relaxed text-muted">
-        Found by AI from public weekly ads, checked daily. Prices can vary by store, so confirm in store.
-      </p>
     </div>
   );
 }

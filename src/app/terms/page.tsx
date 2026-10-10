@@ -27,6 +27,14 @@ export default function Terms() {
         <li>Upload only photos you have the right to share.</li>
       </ul>
 
+      <h2>Campus board</h2>
+      <ul>
+        <li>Posts look anonymous, but they&apos;re tied to your account. Keep them about food, deals, and cheap protein.</li>
+        <li>No names, contact info, or social handles, no harassment or hate, nothing sexual, no selling drugs or alcohol, no spam.</li>
+        <li>Posts are screened automatically, hidden at −5 votes or after two reports, and can be removed by us. Breaking the rules can get you banned from the board.</li>
+        <li>Deals posted by students aren&apos;t checked by us. Confirm before you go.</li>
+      </ul>
+
       <h2>Your account</h2>
       <p>
         You can delete your account anytime from the Account page. We may suspend accounts that abuse the service.

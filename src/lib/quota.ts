@@ -24,13 +24,18 @@ export function adminClient() {
   return admin;
 }
 
-/** Who is asking: a signed-in user (verified from their access token) or a guest by IP. */
-async function caller(request: Request, db: SupabaseClient | null) {
+/** The signed-in user behind a request, verified from their access token (null for guests). */
+export async function requestUser(request: Request, db = adminClient()) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (token && db) {
-    const { data } = await db.auth.getUser(token);
-    if (data.user) return { kind: "user" as const, id: data.user.id };
-  }
+  if (!token || !db) return null;
+  const { data } = await db.auth.getUser(token);
+  return data.user ? { id: data.user.id, email: data.user.email?.toLowerCase() ?? null } : null;
+}
+
+/** Who is asking: a signed-in user or a guest by IP. */
+async function caller(request: Request, db: SupabaseClient | null) {
+  const user = await requestUser(request, db);
+  if (user) return { kind: "user" as const, id: user.id };
   return { kind: "guest" as const, id: clientIp(request) };
 }
 

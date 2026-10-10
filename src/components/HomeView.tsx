@@ -207,14 +207,12 @@ function Home({ profile: initial }: { profile: Profile }) {
             >
               Food
             </button>
-            {deals.length > 0 && (
-              <button
-                onClick={() => setDealsOpen((o) => !o)}
-                className={`rounded-full px-3 py-1 font-mono text-[11px] ${dealsOpen ? "bg-accent font-bold text-on-accent" : "glass text-heading"}`}
-              >
-                Deals · {deals.length}
-              </button>
-            )}
+            <button
+              onClick={() => setDealsOpen((o) => !o)}
+              className={`rounded-full px-3 py-1 font-mono text-[11px] ${dealsOpen ? "bg-accent font-bold text-on-accent" : "glass text-heading"}`}
+            >
+              Deals{deals.length ? ` · ${deals.length}` : ""}
+            </button>
           </div>
         )}
       </header>
@@ -305,7 +303,7 @@ function Home({ profile: initial }: { profile: Profile }) {
           )}
           </div>
         )}
-        {dealsOpen && <DealsPanel deals={deals} onClose={() => setDealsOpen(false)} />}
+        {dealsOpen && center && <DealsPanel deals={deals} center={center} onClose={() => setDealsOpen(false)} />}
         <div className={`glass flex justify-around rounded-3xl py-4 ${chatOpen || dealsOpen ? "hidden" : ""}`}>
           <Ring label="Protein" value={totals.protein} max={profile.proteinTarget} display={`${Math.round(totals.protein)}g`} />
           <Ring label="Calories" value={totals.calories} max={profile.calorieTarget} display={`${Math.round(totals.calories)}`} />
