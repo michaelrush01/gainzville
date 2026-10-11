@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { aiConfigured, chatReply, type ChatTurn } from "@/lib/ai";
 import { COACH_RULES } from "@/lib/coach";
-import { limitMessage, takeQuota } from "@/lib/quota";
+import { adminClient, limitMessage, requestUser, takeQuota } from "@/lib/quota";
 import type { Store } from "@/lib/places";
 import { areaFor, readDeals } from "@/lib/deals";
 import { chainByKey, type Chain } from "@/lib/restaurants";
@@ -28,6 +28,20 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "report_bug",
+    description:
+      "File a bug report when the user says something in the app is broken, crashes, shows an error, or behaves wrongly. Only for app problems, not nutrition questions.",
+    input_schema: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "One line, e.g. 'App reloads to home after saving a food on iPhone'" },
+        details: { type: "string", description: "What they did, what happened, what they expected, device or browser if known" },
+        severity: { type: "string", enum: ["low", "medium", "high"], description: "high = can't use a core feature (scan, log, sign in)" },
+      },
+      required: ["summary", "details", "severity"],
+    },
+  },
+  {
     name: "highlight_stores",
     description: "Point the map at the nearby stores or restaurants that best fit the answer. Use ids from the provided lists only.",
     input_schema: {
@@ -45,6 +59,8 @@ type Body = {
   stores: Pick<Store, "id" | "name" | "tier" | "kind" | "chain">[];
   place: string | null;
   center?: { lat: number; lng: number } | null;
+  /** Last error the app caught in this browser, attached to bug reports */
+  lastError?: string | null;
 };
 
 export async function POST(request: Request) {
@@ -100,13 +116,18 @@ ${deals.length ? deals.map((d) => `${d.chain} | ${d.item} | ${d.deal} | ${d.pric
       toolAck: (call) =>
         call.name === "propose_plan_change"
           ? "Shown to the user with a Confirm button. It is not applied until they confirm. Briefly tell them what changes and why."
-          : "The map now highlights those stores. Briefly say why they're the pick.",
+          : call.name === "report_bug"
+            ? "Bug report saved and sent to the developer. Thank them in one or two sentences. Don't promise a fix date, and don't suggest workarounds or features unless you're sure the app has them (it has photo, barcode, and label scanning, the coach, the map, deals, and the campus board; it has no manual food entry or food search)."
+            : "The map now highlights those stores. Briefly say why they're the pick.",
     });
 
     const actions: Record<string, unknown>[] = [];
     for (const call of toolCalls) {
       if (call.name === "propose_plan_change") {
         actions.push({ type: "plan", change: sanitizeChange(call.input, p) });
+      } else if (call.name === "report_bug") {
+        const saved = await saveBugReport(request, call.input, body.lastError ?? null);
+        if (saved) actions.push({ type: "bug" });
       } else if (call.name === "highlight_stores") {
         const ids = (call.input.store_ids as string[] | undefined)?.filter((id) => stores.some((s) => s.id === id)) ?? [];
         if (ids.length) actions.push({ type: "stores", ids });
@@ -117,6 +138,27 @@ ${deals.length ? deals.map((d) => `${d.chain} | ${d.item} | ${d.deal} | ${d.pric
     console.error("chat failed", err);
     return Response.json({ error: "The coach is having a moment. Try again." }, { status: 500 });
   }
+}
+
+/** Store a bug report from the coach (at most 10 per person or IP per day). */
+async function saveBugReport(request: Request, input: Record<string, unknown>, lastError: string | null) {
+  const db = adminClient();
+  if (!db) return false;
+  const user = await requestUser(request, db);
+  const who = user?.id ?? (request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "unknown");
+  const { data: ok } = await db.rpc("use_quota", { p_bucket: `bug:${who}`, p_max: 10, p_global: "bug:global", p_global_max: 300 });
+  if (!ok) return false;
+  const severity = ["low", "medium", "high"].includes(input.severity as string) ? (input.severity as string) : "medium";
+  const { error } = await db.from("bug_reports").insert({
+    user_id: user?.id ?? null,
+    summary: String(input.summary ?? "Bug report").slice(0, 200),
+    details: String(input.details ?? "").slice(0, 2000),
+    severity,
+    device: (request.headers.get("user-agent") ?? "").slice(0, 400),
+    last_error: lastError ? String(lastError).slice(0, 1000) : null,
+  });
+  if (error) console.error("bug report failed", error.message);
+  return !error;
 }
 
 /** Enforce the guardrails on any plan change, whatever the model asked for. */

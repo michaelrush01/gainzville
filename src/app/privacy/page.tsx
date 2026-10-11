@@ -13,6 +13,7 @@ export default function Privacy() {
         <li>Your food log: what you scanned or added, with its calories, protein, carbs, fat, and cost.</li>
         <li>If you create an account: your email address. With Google sign-in, Google also shares your name and profile picture. We only use the email.</li>
         <li>A daily count of scans and chat messages, so we can keep the free version within its limits.</li>
+        <li>Bug reports you file through the coach: your description, your browser and device type, and the last error the app hit.</li>
         <li>Campus board posts, votes, and reports. Posts show as anonymous to everyone else, but are linked to your account on our server so we can enforce the rules.</li>
       </ul>
 

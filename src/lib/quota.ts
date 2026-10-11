@@ -39,9 +39,16 @@ async function caller(request: Request, db: SupabaseClient | null) {
   return { kind: "guest" as const, id: clientIp(request) };
 }
 
+/** Accounts with no daily limits: the site owner (anyone listed as a board admin). */
+async function isUnlimited(db: SupabaseClient, userId: string) {
+  const { data } = await db.from("board_admins").select("user_id").eq("user_id", userId).maybeSingle();
+  return Boolean(data);
+}
+
 export async function takeQuota(request: Request, feature: Feature) {
   const db = adminClient();
   const who = await caller(request, db);
+  if (db && who.kind === "user" && (await isUnlimited(db, who.id))) return { ok: true, signedIn: true };
   const limits = LIMITS[feature];
   const max = who.kind === "user" ? limits.user : limits.guest;
 

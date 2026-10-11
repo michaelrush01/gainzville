@@ -79,6 +79,13 @@ export function CoachChat({ profile, today, stores, place, center, onApplyPlan, 
           stores: stores.map(({ id, name, tier, kind, chain }) => ({ id, name, tier, kind, chain })),
           place,
           center,
+          lastError: (() => {
+            try {
+              return sessionStorage.getItem("gz.lastError");
+            } catch {
+              return null;
+            }
+          })(),
         }),
       });
       const data = await res.json();
