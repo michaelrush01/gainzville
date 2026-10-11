@@ -62,6 +62,10 @@ export default function ResultView() {
 
   function save() {
     addToLog({ name: result!.name, calories, protein, cost });
+    try {
+      sessionStorage.setItem("gz.justLogged", result!.name);
+      sessionStorage.removeItem("gz.lastResult"); // drop the photo preview from memory
+    } catch {}
     router.push("/");
   }
 

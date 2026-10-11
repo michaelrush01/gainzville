@@ -62,6 +62,8 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect, deal
           pitch: 60,
           bearing: -20,
           attributionControl: { compact: true },
+          // Phones report 3x pixel density; rendering a 3D map at 3x can run iPhones out of memory
+          pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
         });
         map.current = m;
         if (process.env.NODE_ENV === "development") (window as unknown as { __gzmap: MLMap }).__gzmap = m;
@@ -76,7 +78,14 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect, deal
     })();
     return () => {
       cancelled = true;
-      map.current?.remove();
+      const m = map.current;
+      if (m) {
+        // Free the GPU context right away; iOS Safari kills pages that keep old ones around
+        const canvas = m.getCanvas();
+        const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+        m.remove();
+        gl?.getExtension("WEBGL_lose_context")?.loseContext();
+      }
       map.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

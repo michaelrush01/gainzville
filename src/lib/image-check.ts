@@ -5,7 +5,9 @@
 
 const MAX_SIDE = 1280;
 
-export type PreparedImage = { base64: string; mediaType: "image/jpeg"; problem: string | null };
+export type PreparedImage = { base64: string; mediaType: "image/jpeg"; problem: string | null; preview: string };
+
+const PREVIEW_SIDE = 480;
 
 export async function prepareImage(source: CanvasImageSource, width: number, height: number): Promise<PreparedImage> {
   const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
@@ -19,12 +21,28 @@ export async function prepareImage(source: CanvasImageSource, width: number, hei
 
   const problem = checkQuality(ctx, w, h);
   const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-  return { base64: dataUrl.split(",")[1], mediaType: "image/jpeg", problem };
+
+  // A small copy for the result screen, so a full-size photo isn't kept in memory
+  const ps = Math.min(1, PREVIEW_SIDE / Math.max(w, h));
+  const small = document.createElement("canvas");
+  small.width = Math.round(w * ps);
+  small.height = Math.round(h * ps);
+  small.getContext("2d")!.drawImage(canvas, 0, 0, small.width, small.height);
+  const preview = small.toDataURL("image/jpeg", 0.7);
+
+  // Release canvas memory now instead of waiting for garbage collection (matters on iPhones)
+  canvas.width = canvas.height = 0;
+  small.width = small.height = 0;
+  return { base64: dataUrl.split(",")[1], mediaType: "image/jpeg", problem, preview };
 }
 
 export async function prepareFile(file: File) {
   const bitmap = await createImageBitmap(file);
-  return prepareImage(bitmap, bitmap.width, bitmap.height);
+  try {
+    return await prepareImage(bitmap, bitmap.width, bitmap.height);
+  } finally {
+    bitmap.close();
+  }
 }
 
 function checkQuality(ctx: CanvasRenderingContext2D, w: number, h: number): string | null {

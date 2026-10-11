@@ -66,7 +66,7 @@ export default function ScanPage() {
       return;
     }
     // Keep a small preview of the meal for the result screen (not saved anywhere else)
-    finish({ ...result, imageUrl: `data:${img.mediaType};base64,${img.base64}` });
+    finish({ ...result, imageUrl: img.preview });
   }
 
   async function shutter() {
@@ -80,8 +80,17 @@ export default function ScanPage() {
     analyze(await prepareFile(file));
   }
 
-  function finish(result: ScanResult) {
+  function stopCamera() {
     controlsRef.current?.stop();
+    controlsRef.current = null;
+    // Make sure the camera is fully released before the next screen loads
+    const stream = videoRef.current?.srcObject as MediaStream | null | undefined;
+    stream?.getTracks().forEach((t) => t.stop());
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }
+
+  function finish(result: ScanResult) {
+    stopCamera();
     stashResult(result);
     router.push("/scan/result");
   }
@@ -112,8 +121,7 @@ export default function ScanPage() {
     start();
     return () => {
       cancelled = true;
-      controlsRef.current?.stop();
-      controlsRef.current = null;
+      stopCamera();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);

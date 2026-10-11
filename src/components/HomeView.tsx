@@ -103,6 +103,23 @@ function Home({ profile: initial }: { profile: Profile }) {
     setAttempt((a) => a + 1);
   }
 
+  // "Saved" confirmation after logging a food from the result screen
+  const [justLogged, setJustLogged] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem("gz.justLogged");
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    if (!justLogged) return;
+    try {
+      sessionStorage.removeItem("gz.justLogged");
+    } catch {}
+    const t = setTimeout(() => setJustLogged(null), 3000);
+    return () => clearTimeout(t);
+  }, [justLogged]);
+
   const [chatOpen, setChatOpen] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
@@ -235,6 +252,11 @@ function Home({ profile: initial }: { profile: Profile }) {
         >
           {locating ? <span className="animate-pulse">…</span> : "◎"}
         </button>
+        {justLogged && (
+          <p role="status" className="absolute inset-x-4 top-28 z-20 mx-auto max-w-sm truncate rounded-full bg-accent px-4 py-2 text-center font-mono text-xs font-bold text-on-accent">
+            ✓ Saved {justLogged}
+          </p>
+        )}
         {locError && (
           <div className="glass absolute inset-x-4 bottom-12 z-20 rounded-2xl p-4 pr-10">
             <p className="font-mono text-xs leading-relaxed text-heading">{locError}</p>
