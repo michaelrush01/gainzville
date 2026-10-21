@@ -38,3 +38,6 @@ grant execute on function public.use_quota(text, integer, text, integer) to serv
 
 -- Old rows aren't needed after a few days
 create index if not exists usage_day on public.usage (day);
+
+-- Explicit Data API grants (Supabase stops auto-granting new public tables on 2026-10-30)
+grant all on public.usage to service_role;

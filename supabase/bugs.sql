@@ -15,3 +15,6 @@ create index if not exists bug_reports_status on public.bug_reports (status, cre
 alter table public.bug_reports enable row level security;  -- no policies: server only
 notify pgrst, 'reload schema';
 select to_regclass('public.bug_reports') as created;
+
+-- Explicit Data API grants (Supabase stops auto-granting new public tables on 2026-10-30)
+grant all on public.bug_reports to service_role;

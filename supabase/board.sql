@@ -101,3 +101,6 @@ grant execute on function public.board_report(bigint, uuid, text) to service_rol
 insert into public.board_admins (user_id)
 select id from auth.users where email = 'michaelrushnyc@gmail.com'
 on conflict do nothing;
+
+-- Explicit Data API grants (Supabase stops auto-granting new public tables on 2026-10-30)
+grant all on public.board_posts, public.board_votes, public.board_reports, public.board_bans, public.board_admins to service_role;

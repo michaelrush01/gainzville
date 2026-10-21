@@ -52,3 +52,7 @@ end;
 $$;
 revoke all on function public.claim_deal_refresh(text, integer) from public, anon, authenticated;
 grant execute on function public.claim_deal_refresh(text, integer) to service_role;
+
+-- Explicit Data API grants (Supabase stops auto-granting new public tables on 2026-10-30)
+grant select on public.deals to anon, authenticated;
+grant all on public.deals, public.deal_areas to service_role;

@@ -77,3 +77,6 @@ revoke all on function public.board_reply_vote(bigint, uuid, integer) from publi
 revoke all on function public.board_reply_report(bigint, uuid, text) from public, anon, authenticated;
 grant execute on function public.board_reply_vote(bigint, uuid, integer) to service_role;
 grant execute on function public.board_reply_report(bigint, uuid, text) to service_role;
+
+-- Explicit Data API grants (Supabase stops auto-granting new public tables on 2026-10-30)
+grant all on public.board_replies, public.board_reply_votes, public.board_reply_reports to service_role;

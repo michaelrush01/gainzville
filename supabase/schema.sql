@@ -37,3 +37,7 @@ as $$
 $$;
 revoke all on function public.delete_my_account() from public, anon;
 grant execute on function public.delete_my_account() to authenticated;
+
+-- Explicit Data API grants (Supabase stops auto-granting new public tables on 2026-10-30)
+grant select, insert, update, delete on public.profiles, public.food_logs to authenticated;
+grant all on public.profiles, public.food_logs to service_role;
