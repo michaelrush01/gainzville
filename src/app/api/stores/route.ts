@@ -2,7 +2,7 @@ import { storeTier, type Store } from "@/lib/places";
 import { CHAIN_PATTERN, chainFor } from "@/lib/restaurants";
 
 // Nearby grocery stores and protein-friendly restaurant chains from OpenStreetMap (free, ODbL).
-// Asks two Overpass servers at once and uses whichever answers first (the main one
+// Asks several Overpass servers at once and uses whichever answers first (the main one
 // can take 15+ seconds when busy). Falls back to Nominatim if both fail.
 // Results are cached per ~1 km area so we stay polite to these free services.
 
@@ -12,7 +12,13 @@ const UA = "Gainzville/0.1 (student project)";
 const RADIUS_M = 6000; // a short drive: big-box stores like Trader Joe's are rarely right on campus
 const MAX_STORES = 45;
 const MAX_FOOD = 20;
-const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+// Public Overpass mirrors; we race them and take the first good answer (any one can be overloaded)
+const OVERPASS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+];
 const cache = new Map<string, { at: number; stores: Store[] }>();
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -28,11 +34,17 @@ export async function GET(request: Request) {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < DAY) return Response.json({ stores: hit.stores });
 
-  const stores = (await fromOverpass(lat, lng)) ?? (await fromNominatim(lat, lng));
+  const full = await fromOverpass(lat, lng);
+  if (full) {
+    cache.set(key, { at: Date.now(), stores: full });
+    return Response.json({ stores: full }, { headers: { "Cache-Control": "public, s-maxage=86400" } });
+  }
+  // Backup source only knows grocery stores (no restaurants), so keep it briefly and try Overpass again soon
+  const partial = await fromNominatim(lat, lng);
   // Every source failed: say so, so the app can offer a retry instead of "no stores"
-  if (!stores) return Response.json({ stores: [], error: "Store data is busy." }, { status: 503, headers: { "Cache-Control": "no-store" } });
-  cache.set(key, { at: Date.now(), stores });
-  return Response.json({ stores }, { headers: { "Cache-Control": "public, s-maxage=86400" } });
+  if (!partial) return Response.json({ stores: [], error: "Store data is busy." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  cache.set(key, { at: Date.now() - DAY + 10 * 60 * 1000, stores: partial });
+  return Response.json({ stores: partial, partial: true }, { headers: { "Cache-Control": "public, s-maxage=600" } });
 }
 
 async function fromOverpass(lat: number, lng: number): Promise<Store[] | null> {
@@ -44,7 +56,7 @@ async function fromOverpass(lat: number, lng: number): Promise<Store[] | null> {
       method: "POST",
       headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" },
       body: `data=${encodeURIComponent(query)}`,
-      signal: AbortSignal.timeout(22000),
+      signal: AbortSignal.timeout(25000),
     });
     const data = res.ok ? await res.json().catch(() => null) : null;
     if (!data?.elements) throw new Error("no data");

@@ -74,6 +74,8 @@ function Home({ profile: initial }: { profile: Profile }) {
         if (cancelled) return;
         if (d.stores?.length) {
           setStores(d.stores);
+          // Don't remember a partial list (grocery only, no restaurants); next visit should try for the full one
+          if (d.partial) return;
           try {
             localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), stores: d.stores }));
           } catch {
@@ -138,13 +140,21 @@ function Home({ profile: initial }: { profile: Profile }) {
       const cur = byChain.get(d.chain);
       byChain.set(d.chain, { n: (cur?.n ?? 0) + 1, best: cur?.best ?? d });
     }
+    // Spell the deal out on the closest location of each chain; other locations just get a short tag,
+    // so eight Publixes don't all repeat the same long label
     const out: Record<string, { n: number; best: string }> = {};
-    for (const s of stores) {
-      const hit = byChain.get(chainOf(s) ?? "");
-      if (hit) out[s.id] = { n: hit.n, best: shortDeal(hit.best) };
+    const labeled = new Set<string>();
+    const near = center ? [...stores].sort((a, b) => dist(a, center) - dist(b, center)) : stores;
+    for (const s of near) {
+      const chain = chainOf(s) ?? "";
+      const hit = byChain.get(chain);
+      if (!hit) continue;
+      const first = !labeled.has(chain);
+      labeled.add(chain);
+      out[s.id] = { n: hit.n, best: first ? shortDeal(hit.best) : dealTag(hit.best) };
     }
     return out;
-  }, [deals, stores, chainOf]);
+  }, [deals, stores, chainOf, center]);
 
   function retryStores() {
     setStoreError(false);
@@ -404,5 +414,15 @@ function Home({ profile: initial }: { profile: Profile }) {
 function shortDeal(d: Deal) {
   const strip = (t: string) => t.replace(/\s*\(.*?\)/g, "").split(/,| - /)[0].trim();
   const text = `${strip(d.deal)} · ${strip(d.item)}`;
-  return text.length > 34 ? `${text.slice(0, 33)}…` : text;
+  return text.length > 26 ? `${text.slice(0, 25)}…` : text;
+}
+
+/** Just the deal itself ("BOGO", "$1.99/lb") for the other locations of a chain. */
+function dealTag(d: Deal) {
+  const t = d.deal.replace(/\s*\(.*?\)/g, "").split(/,| - /)[0].trim();
+  return t.length > 14 ? `${t.slice(0, 13)}…` : t;
+}
+
+function dist(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  return Math.hypot(a.lat - b.lat, (a.lng - b.lng) * Math.cos((b.lat * Math.PI) / 180));
 }

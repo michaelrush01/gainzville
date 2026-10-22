@@ -132,10 +132,11 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect, deal
         "text-field": [
           "case",
           ["get", "hasDeal"],
-          ["format", ["get", "name"], {}, "\n", {}, ["get", "deal"], { "font-scale": 0.92, "text-color": C.deal }],
+          ["format", ["get", "name"], {}, "\n", {}, ["get", "deal"], { "font-scale": 0.88, "text-color": C.deal }],
           ["get", "name"],
         ],
         "text-line-height": 1.35,
+        "text-max-width": 16,
         "text-font": ["Noto Sans Bold"],
         "text-size": 11,
         "icon-image": ["case", ["get", "hot"], "pin-hot", ["get", "hasDeal"], "pin-deal", ["==", ["get", "kind"], "food"], "pin-food", ["==", ["get", "tier"], "budget"], "pin-budget", "pin"],
@@ -175,7 +176,7 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect, deal
           properties: {
             id: s.id,
             name: s.name,
-            deal: dealCounts?.[s.id] ? `${dealCounts[s.id].best}${dealCounts[s.id].n > 1 ? `  +${dealCounts[s.id].n - 1}` : ""}` : "",
+            deal: dealCounts?.[s.id] ? `${dealCounts[s.id].best}${dealCounts[s.id].n > 1 ? `  +${dealCounts[s.id].n - 1} more` : ""}` : "",
             hasDeal: Boolean(dealCounts?.[s.id]),
             tier: s.tier ?? "standard",
             kind: s.kind ?? "grocery",
