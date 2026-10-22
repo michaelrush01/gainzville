@@ -27,6 +27,7 @@ const C = {
   accent: "#b79cff",
   heading: "#e6ddff",
   food: "#ffb38a",
+  deal: "#8dffc5",
 };
 
 type Props = {
@@ -35,8 +36,8 @@ type Props = {
   showUser: boolean;
   highlightId?: string | null;
   onSelect?: (s: Store) => void;
-  /** Store id -> number of deals this week, shown on the pin */
-  dealCounts?: Record<string, number>;
+  /** Store id -> this week's deals (count + best one), shown right on the pin */
+  dealCounts?: Record<string, { n: number; best: string }>;
 };
 
 export function StoreMap({ center, stores, showUser, highlightId, onSelect, dealCounts }: Props) {
@@ -127,20 +128,27 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect, deal
       type: "symbol",
       source: "stores",
       layout: {
-        "text-field": ["get", "label"],
+        // Store name, plus its best deal of the week on a second line in green
+        "text-field": [
+          "case",
+          ["get", "hasDeal"],
+          ["format", ["get", "name"], {}, "\n", {}, ["get", "deal"], { "font-scale": 0.92, "text-color": C.deal }],
+          ["get", "name"],
+        ],
+        "text-line-height": 1.35,
         "text-font": ["Noto Sans Bold"],
         "text-size": 11,
-        "icon-image": ["case", ["get", "hot"], "pin-hot", ["==", ["get", "kind"], "food"], "pin-food", ["==", ["get", "tier"], "budget"], "pin-budget", "pin"],
+        "icon-image": ["case", ["get", "hot"], "pin-hot", ["get", "hasDeal"], "pin-deal", ["==", ["get", "kind"], "food"], "pin-food", ["==", ["get", "tier"], "budget"], "pin-budget", "pin"],
         "icon-text-fit": "both",
         "icon-text-fit-padding": [2, 8, 2, 8],
         "text-anchor": "bottom",
         "icon-anchor": "bottom",
-        // Placement priority when labels collide: selected store, then budget stores, then nearest
-        "symbol-sort-key": ["get", "rank"],
+            "symbol-sort-key": ["get", "rank"],
+        "text-justify": "center",
         "text-padding": 4,
       },
       paint: {
-        "text-color": ["case", ["any", ["get", "hot"], ["==", ["get", "tier"], "budget"], ["==", ["get", "kind"], "food"]], C.ground, C.textBright],
+        "text-color": ["case", ["get", "hot"], C.ground, ["get", "hasDeal"], C.textBright, ["any", ["==", ["get", "tier"], "budget"], ["==", ["get", "kind"], "food"]], C.ground, C.textBright],
       },
     });
     m.on("click", "store-pins", (e) => {
@@ -164,7 +172,17 @@ export function StoreMap({ center, stores, showUser, highlightId, onSelect, deal
         return {
           type: "Feature",
           geometry: { type: "Point", coordinates: [s.lng, s.lat] },
-          properties: { id: s.id, name: s.name, label: dealCounts?.[s.id] ? `${s.name} · ${dealCounts[s.id]} deal${dealCounts[s.id] > 1 ? "s" : ""}` : s.name, tier: s.tier ?? "standard", kind: s.kind ?? "grocery", hot, rank: hot ? 0 : (s.tier === "budget" ? 1 : s.kind === "food" ? 500 : 1000) + i },
+          properties: {
+            id: s.id,
+            name: s.name,
+            deal: dealCounts?.[s.id] ? `${dealCounts[s.id].best}${dealCounts[s.id].n > 1 ? `  +${dealCounts[s.id].n - 1}` : ""}` : "",
+            hasDeal: Boolean(dealCounts?.[s.id]),
+            tier: s.tier ?? "standard",
+            kind: s.kind ?? "grocery",
+            hot,
+            // Placement priority when labels collide: selected, then stores with deals, then budget, then nearest
+            rank: hot ? 0 : (dealCounts?.[s.id] ? 1 : s.tier === "budget" ? 2 : s.kind === "food" ? 500 : 1000) + i,
+          },
         };
       }),
     });
@@ -292,6 +310,7 @@ function addPinImages(m: MLMap) {
   make("pin-budget", C.accent, C.accent, 1);
   make("pin-food", C.food, C.food, 1);
   make("pin-hot", C.accent, C.heading, 3);
+  make("pin-deal", "rgba(16,40,30,0.94)", C.deal, 2);
 }
 
 function distanceKm(a: LatLng, b: LatLng) {

@@ -48,51 +48,100 @@ function Home({ profile: initial }: { profile: Profile }) {
   useEffect(() => {
     if (!center) return;
     let cancelled = false;
+    // Show the stores we saw here last time right away, then refresh them in the background
+    const cacheKey = `gz.stores:${center.lat.toFixed(2)},${center.lng.toFixed(2)}`;
+    let hadCache = false;
+    let saved: { at: number; stores: Store[] } | null = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(cacheKey) ?? "null");
+    } catch {
+      /* storage unavailable */
+    }
+    if (saved?.stores?.length && Date.now() - saved.at < 7 * 86400_000) {
+      hadCache = true;
+      const cached = saved.stores;
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setStores(cached);
+        setLoading(false);
+      });
+    }
     // Free map data servers are sometimes slow or busy, so try twice before giving up
     const get = () => fetch(`/api/stores?lat=${center.lat}&lng=${center.lng}`).then((r) => r.json());
     get()
       .then((d) => (d.stores?.length ? d : get()))
       .then((d) => {
         if (cancelled) return;
-        setStores(d.stores ?? []);
-        setStoreError(Boolean(d.error) || !d.stores);
+        if (d.stores?.length) {
+          setStores(d.stores);
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), stores: d.stores }));
+          } catch {
+            /* storage full or unavailable */
+          }
+        }
+        if (!hadCache) setStoreError(Boolean(d.error) || !d.stores?.length);
       })
-      .catch(() => !cancelled && setStoreError(true))
+      .catch(() => !cancelled && !hadCache && setStoreError(true))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
   }, [center, attempt]);
 
-  // This week's deals for the chains around here (saved by a daily job, so this is a quick read)
+  // This week's deals for the chains around here. Saved deals load right away (a quick read);
+  // once the nearby stores are known we send their names so the area gets researched if needed,
+  // then check back a few times in case a fresh search is filling it in.
   const [deals, setDeals] = useState<Deal[]>([]);
   const [dealsOpen, setDealsOpen] = useState(false);
   const storesReady = stores.length > 0;
   useEffect(() => {
-    if (!center || !storesReady) return;
+    if (!center) return;
     let cancelled = false;
-    fetch("/api/deals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lat: center.lat, lng: center.lng, names: [...new Set(stores.map((s) => s.name))] }),
-    })
-      .then((r) => r.json())
-      .then((d) => !cancelled && setDeals(d.deals ?? []))
-      .catch(() => {});
+    const ask = (names: string[]) =>
+      fetch("/api/deals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat: center.lat, lng: center.lng, names }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (!cancelled && d.deals?.length) setDeals(d.deals);
+          return (d.deals ?? []) as Deal[];
+        })
+        .catch(() => [] as Deal[]);
+    if (!storesReady) {
+      ask([]); // instant: whatever is already saved for this area
+      return () => {
+        cancelled = true;
+      };
+    }
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      const found = await ask([...new Set(stores.map((s) => s.name))]);
+      if (!cancelled && !found.length && ++tries < 8) timer = setTimeout(poll, 20000);
+    };
+    poll();
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
     // Only when the place changes or its stores first arrive, not on every store list update
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [center, storesReady]);
   const chainOf = useCallback((s: Store) => (s.kind === "food" ? s.name : adChain(s.name)), []);
+  // Per store: how many deals, and the best one (deals arrive sorted best protein per dollar first)
   const dealCounts = useMemo(() => {
-    const byChain = new Map<string, number>();
-    for (const d of deals) byChain.set(d.chain, (byChain.get(d.chain) ?? 0) + 1);
-    const out: Record<string, number> = {};
+    const byChain = new Map<string, { n: number; best: Deal }>();
+    for (const d of deals) {
+      const cur = byChain.get(d.chain);
+      byChain.set(d.chain, { n: (cur?.n ?? 0) + 1, best: cur?.best ?? d });
+    }
+    const out: Record<string, { n: number; best: string }> = {};
     for (const s of stores) {
-      const n = byChain.get(chainOf(s) ?? "");
-      if (n) out[s.id] = n;
+      const hit = byChain.get(chainOf(s) ?? "");
+      if (hit) out[s.id] = { n: hit.n, best: shortDeal(hit.best) };
     }
     return out;
   }, [deals, stores, chainOf]);
@@ -349,4 +398,11 @@ function Home({ profile: initial }: { profile: Profile }) {
       </div>
     </main>
   );
+}
+
+/** "BOGO · chicken breast" style text that fits on a map pin. */
+function shortDeal(d: Deal) {
+  const strip = (t: string) => t.replace(/\s*\(.*?\)/g, "").split(/,| - /)[0].trim();
+  const text = `${strip(d.deal)} · ${strip(d.item)}`;
+  return text.length > 34 ? `${text.slice(0, 33)}…` : text;
 }
