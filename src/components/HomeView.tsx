@@ -51,6 +51,7 @@ function Home({ profile: initial }: { profile: Profile }) {
     // Show the stores we saw here last time right away, then refresh them in the background
     const cacheKey = `gz.stores:${center.lat.toFixed(2)},${center.lng.toFixed(2)}`;
     let hadCache = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let saved: { at: number; stores: Store[] } | null = null;
     try {
       saved = JSON.parse(localStorage.getItem(cacheKey) ?? "null");
@@ -74,8 +75,12 @@ function Home({ profile: initial }: { profile: Profile }) {
         if (cancelled) return;
         if (d.stores?.length) {
           setStores(d.stores);
-          // Don't remember a partial list (grocery only, no restaurants); next visit should try for the full one
-          if (d.partial) return;
+          // A partial list (grocery only, no restaurants) means the server is still fetching the full one
+          // in the background: don't remember it, and check back in a minute
+          if (d.partial) {
+            if (attempt < 3) retryTimer = setTimeout(() => setAttempt((a) => a + 1), 60000);
+            return;
+          }
           try {
             localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), stores: d.stores }));
           } catch {
@@ -88,6 +93,7 @@ function Home({ profile: initial }: { profile: Profile }) {
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
+      clearTimeout(retryTimer);
     };
   }, [center, attempt]);
 

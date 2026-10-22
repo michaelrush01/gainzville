@@ -1,12 +1,15 @@
+import { after } from "next/server";
 import { storeTier, type Store } from "@/lib/places";
+import { adminClient } from "@/lib/quota";
 import { CHAIN_PATTERN, chainFor } from "@/lib/restaurants";
 
 // Nearby grocery stores and protein-friendly restaurant chains from OpenStreetMap (free, ODbL).
 // Asks several Overpass servers at once and uses whichever answers first (the main one
 // can take 15+ seconds when busy). Falls back to Nominatim if both fail.
-// Results are cached per ~1 km area so we stay polite to these free services.
+// Results are saved per ~1 km area in our database (and in memory), so after one good answer
+// the map no longer depends on these free services; stale lists refresh in the background.
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const UA = "Gainzville/0.1 (student project)";
 const RADIUS_M = 6000; // a short drive: big-box stores like Trader Joe's are rarely right on campus
@@ -34,29 +37,77 @@ export async function GET(request: Request) {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < DAY) return Response.json({ stores: hit.stores });
 
-  const full = await fromOverpass(lat, lng);
+  // 1) A full list we saved earlier: serve it now, refresh it in the background if it's getting old
+  const saved = await readSaved(key);
+  if (saved?.full) {
+    const age = Date.now() - saved.at;
+    if (age > DAY) after(() => refresh(key, lat, lng));
+    cache.set(key, { at: Date.now(), stores: saved.stores });
+    return Response.json({ stores: saved.stores }, { headers: { "Cache-Control": "public, s-maxage=3600" } });
+  }
+
+  // 2) Nothing good saved yet: ask OpenStreetMap now
+  const full = await fromOverpass(lat, lng, 25000);
   if (full) {
     cache.set(key, { at: Date.now(), stores: full });
+    after(() => save(key, full, true));
     return Response.json({ stores: full }, { headers: { "Cache-Control": "public, s-maxage=86400" } });
   }
-  // Backup source only knows grocery stores (no restaurants), so keep it briefly and try Overpass again soon
+
+  // 3) OpenStreetMap is busy: keep trying in the background (with more patience), and meanwhile
+  // show a grocery-only list from the backup source so the map isn't empty
+  after(() => refresh(key, lat, lng));
+  if (saved) return Response.json({ stores: saved.stores, partial: true }, { headers: { "Cache-Control": "no-store" } });
   const partial = await fromNominatim(lat, lng);
   // Every source failed: say so, so the app can offer a retry instead of "no stores"
   if (!partial) return Response.json({ stores: [], error: "Store data is busy." }, { status: 503, headers: { "Cache-Control": "no-store" } });
-  cache.set(key, { at: Date.now() - DAY + 10 * 60 * 1000, stores: partial });
-  return Response.json({ stores: partial, partial: true }, { headers: { "Cache-Control": "public, s-maxage=600" } });
+  after(() => save(key, partial, false));
+  return Response.json({ stores: partial, partial: true }, { headers: { "Cache-Control": "no-store" } });
 }
 
-async function fromOverpass(lat: number, lng: number): Promise<Store[] | null> {
+async function readSaved(key: string): Promise<{ stores: Store[]; full: boolean; at: number } | null> {
+  const db = adminClient();
+  if (!db) return null;
+  const { data } = await db.from("store_cache").select("stores,full_list,updated_at").eq("key", key).maybeSingle();
+  return data ? { stores: data.stores as Store[], full: data.full_list, at: new Date(data.updated_at).getTime() } : null;
+}
+
+async function save(key: string, stores: Store[], full: boolean) {
+  const db = adminClient();
+  if (!db || !stores.length) return;
+  if (!full) {
+    // never replace a full list with a grocery-only one
+    const { data } = await db.from("store_cache").select("full_list").eq("key", key).maybeSingle();
+    if (data?.full_list) return;
+  }
+  await db.from("store_cache").upsert({ key, stores, full_list: full, updated_at: new Date().toISOString() });
+}
+
+const refreshing = new Set<string>();
+/** Background retry with a longer timeout; saves the full list once OpenStreetMap answers. */
+async function refresh(key: string, lat: number, lng: number) {
+  if (refreshing.has(key)) return; // one retry per area at a time
+  refreshing.add(key);
+  try {
+    const full = await fromOverpass(lat, lng, 50000);
+    if (!full) return;
+    cache.set(key, { at: Date.now(), stores: full });
+    await save(key, full, true);
+  } finally {
+    refreshing.delete(key);
+  }
+}
+
+async function fromOverpass(lat: number, lng: number, timeoutMs: number): Promise<Store[] | null> {
   const around = `(around:${RADIUS_M},${lat},${lng})`;
   const food = `["amenity"~"^(fast_food|restaurant)$"]`;
-  const query = `[out:json][timeout:20];(nwr["shop"~"^(supermarket|wholesale|greengrocer)$"]${around};nwr${food}["brand"~"^(${CHAIN_PATTERN})",i]${around};nwr${food}["name"~"^(${CHAIN_PATTERN})",i]${around};);out center tags;`;
+  const query = `[out:json][timeout:${Math.round(timeoutMs / 1000)}];(nwr["shop"~"^(supermarket|wholesale|greengrocer)$"]${around};nwr${food}["brand"~"^(${CHAIN_PATTERN})",i]${around};nwr${food}["name"~"^(${CHAIN_PATTERN})",i]${around};);out center tags;`;
   const ask = async (url: string) => {
     const res = await fetch(url, {
       method: "POST",
       headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" },
       body: `data=${encodeURIComponent(query)}`,
-      signal: AbortSignal.timeout(25000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const data = res.ok ? await res.json().catch(() => null) : null;
     if (!data?.elements) throw new Error("no data");
