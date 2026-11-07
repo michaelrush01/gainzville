@@ -42,7 +42,9 @@ export function DealLine({ d, showChain = true }: { d: Deal; showChain?: boolean
 }
 
 export function DealsPanel({ deals, center, onClose }: { deals: Deal[]; center: { lat: number; lng: number }; onClose: () => void }) {
-  const [tab, setTab] = useState<"ads" | "board">(deals.length ? "ads" : "board");
+  // Follow the deals until the user picks a tab: they can arrive after the panel opens
+  const [picked, setPicked] = useState<"ads" | "board" | null>(null);
+  const tab = picked ?? (deals.length ? "ads" : "board");
   return (
     <div className="glass relative max-h-[55dvh] overflow-y-auto rounded-3xl px-5 py-4">
       <div className="mb-3 flex items-center justify-between">
@@ -50,7 +52,7 @@ export function DealsPanel({ deals, center, onClose }: { deals: Deal[]; center: 
           {(["ads", "board"] as const).map((t) => (
             <button
               key={t}
-              onClick={() => setTab(t)}
+              onClick={() => setPicked(t)}
               className={tab === t ? "font-bold text-accent underline decoration-2 underline-offset-8" : "text-muted"}
             >
               {t === "ads" ? `WEEKLY ADS${deals.length ? ` · ${deals.length}` : ""}` : "CAMPUS BOARD"}
